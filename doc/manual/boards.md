@@ -1633,6 +1633,9 @@ The PicoCalc's USB-C port cannot put the ESP32-S3 into its bootloader, and the
 mainboard (keyboard, battery and backlight controller) only runs while the
 PicoCalc itself is powered, so connect the PicoCalc's battery or USB-C supply
 as well. To enter the bootloader, hold BOOT (GPIO0), tap RESET, and release BOOT.
+The USB console carries the system log; the shell runs on the LCD. For a shell
+over USB as well, run `session create shell cdc0`. To start it at every boot,
+add that line to the startup script (`setterm startup` shows its path).
 
 The Waveshare module does not number its header like a Pico. The mainboard
 signals reach the module through this mapping:
@@ -1722,6 +1725,10 @@ Current state (staged bring-up):
   debug UART) and GPIO33/GPIO34 (the link to the keyboard controller's second
   UART) are free for GPIO, PWM and UART expansion. GPIO10, the Pico `ADC_VREF`
   pad, is never driven.
+
+The target defaults to the `full` flavor, which leaves about 90 KB of internal
+RAM free after boot. `SOLAR_OS_FLAVOR=writerdeck` builds the smaller
+`writerdeck` flavor, which leaves about 115 KB.
 
 ```sh
 pio run -e picocalc_esp32_s3_pico
