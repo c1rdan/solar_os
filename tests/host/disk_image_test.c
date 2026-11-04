@@ -154,6 +154,78 @@ static void check_fat_variant(const char *path, uint32_t bytes, BYTE format, uns
     if (partition == 2) assert(solar_os_disk_image_mount(path, "/mnt/dos", 1) == ESP_ERR_NOT_SUPPORTED);
     assert(solar_os_storage_remove(path) == ESP_OK);
 }
+/* An 8 MiB RAM buffer stands in for a device such as an external PSRAM chip. */
+enum { RAM_BYTES = 8 * 1024 * 1024 };
+static uint8_t *ram;
+static bool ram_fail;
+static esp_err_t ram_read(void *context, uint32_t offset, void *data, size_t length)
+{
+    assert(context == ram && offset % 512U == 0 && length && offset + length <= RAM_BYTES);
+    if (ram_fail) return ESP_FAIL;
+    memcpy(data, ram + offset, length); return ESP_OK;
+}
+static esp_err_t ram_write(void *context, uint32_t offset, const void *data, size_t length)
+{
+    assert(context == ram && offset % 512U == 0 && length && offset + length <= RAM_BYTES);
+    if (ram_fail) return ESP_FAIL;
+    memcpy(ram + offset, data, length); return ESP_OK;
+}
+static esp_err_t attach_ram(const char *name, uint32_t size, const char *mount, size_t work_size)
+{
+    static const solar_os_disk_image_device_t device = {.read = ram_read, .write = ram_write};
+    static uint8_t work[SOLAR_OS_DISK_IMAGE_FORMAT_WORK_BYTES];
+    return solar_os_disk_image_attach_device(name, "ram", &device, ram, size, mount, work, work_size);
+}
+static void check_device_volume(void)
+{
+    const size_t work = SOLAR_OS_DISK_IMAGE_FORMAT_WORK_BYTES;
+    ram = malloc(RAM_BYTES); assert(ram); memset(ram, 0xa5, RAM_BYTES);
+    const size_t mounts = solar_os_storage_mount_count();
+    assert(attach_ram("psram0", RAM_BYTES, "/psram", work - 1) == ESP_ERR_INVALID_ARG);
+    assert(attach_ram("", RAM_BYTES, "/psram", work) == ESP_ERR_INVALID_ARG);
+    assert(attach_ram("psram0", RAM_BYTES, "/", work) == ESP_ERR_INVALID_ARG);
+    assert(attach_ram("psram0", 0x80000000U, "/psram", work) == ESP_ERR_INVALID_SIZE);
+    assert(attach_ram("psram0", 32 * 1024, "/psram", work) == ESP_ERR_INVALID_SIZE);
+    assert(attach_ram("psram0", RAM_BYTES - 1, "/psram", work) == ESP_ERR_INVALID_SIZE);
+    assert(attach_ram("psram0", RAM_BYTES, "/tmp", work) == ESP_ERR_INVALID_STATE);
+    /* A device that fails while formatting leaves no claim or drive behind. */
+    ram_fail = true;
+    assert(attach_ram("psram0", RAM_BYTES, "/psram", work) == ESP_FAIL);
+    ram_fail = false;
+    assert(solar_os_disk_image_mount_count() == 0 && !impls[2]);
+
+    assert(attach_ram("psram0", RAM_BYTES, "/psram", work) == ESP_OK);
+    assert(solar_os_disk_image_mount_count() == 1 && solar_os_storage_mount_count() == mounts + 1);
+    solar_os_storage_block_t block;
+    assert(solar_os_disk_image_get_block(0, &block));
+    assert(!strcmp(block.name, "psram0") && !strcmp(block.type_name, "ram"));
+    assert(!strcmp(block.mount_point, "/psram") && block.size_bytes == RAM_BYTES);
+    solar_os_storage_mount_info_t info;
+    assert(solar_os_disk_image_get_mount(0, &info) && info.type == SOLAR_OS_STORAGE_MOUNT_IMAGE);
+    assert(!strcmp(info.name, "psram0") && !strcmp(info.mount_point, "/psram"));
+    solar_os_storage_usage_t usage;
+    assert(solar_os_storage_get_usage_for_path("/psram", &usage) == ESP_OK &&
+           usage.total_bytes > 7 * 1024 * 1024);
+    host_write_file("RAM disk contents"); host_read_file("RAM disk contents");
+    /* One volume per name and per mount point; no image may sit inside it. */
+    assert(attach_ram("psram0", RAM_BYTES, "/psram2", work) == ESP_ERR_INVALID_STATE);
+    assert(attach_ram("psram1", RAM_BYTES, "/psram", work) == ESP_ERR_INVALID_STATE);
+    assert(solar_os_disk_image_mount("/tmp/any.img", "/psram/sub", 0) == ESP_ERR_INVALID_STATE);
+    assert(!solar_os_disk_image_path_busy("/tmp") && !solar_os_disk_image_backing_busy("/tmp"));
+    /* The ordinary unmount, as before shutdown, releases a device volume too. */
+    assert(solar_os_storage_unmount_volume("psram0") == ESP_OK);
+    assert(solar_os_disk_image_mount_count() == 0 && !impls[2]);
+    assert(solar_os_disk_image_detach_device("/psram") == ESP_ERR_NOT_FOUND);
+    /* Attaching again formats a fresh, empty volume. */
+    assert(attach_ram("psram0", RAM_BYTES, "/psram/", work) == ESP_OK);
+    char path[] = "0:/HELLO.TXT"; path[0] += mounted_volume();
+    FILINFO file_info; assert(f_stat(path, &file_info) == FR_NO_FILE);
+    host_write_file("second boot");
+    assert(solar_os_disk_image_detach_device("/psram") == ESP_OK);
+    assert(solar_os_disk_image_mount_count() == 0 && !impls[2]);
+    free(ram); ram = NULL;
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 2);
@@ -230,6 +302,7 @@ int main(int argc, char **argv)
     check_fat_variant(blank, 1440U * 1024U, FM_FAT | FM_SFD, 0, FS_FAT12);
     check_fat_variant(blank, 64U * 1024U * 1024U, FM_FAT32 | FM_SFD, 0, FS_FAT32);
     check_fat_variant(blank, 16U * 1024U * 1024U, FM_FAT, 2, FS_FAT16);
-    puts("Real FatFS image creation, host edits, claims, bounds, sync and cleanup passed");
+    check_device_volume();
+    puts("Real FatFS image creation, device volumes, host edits, claims, bounds, sync and cleanup passed");
     return 0;
 }

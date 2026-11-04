@@ -34,6 +34,11 @@ typedef struct {
     bool registered, mounted;
     _lock_t io_lock;
     image_identity_t identity;
+    /* Device-backed volumes have no file: fd is -1 and path is empty. */
+    const solar_os_disk_image_device_t *device;
+    void *device_context;
+    char name[SOLAR_OS_STORAGE_BLOCK_NAME_MAX];
+    char type_name[SOLAR_OS_STORAGE_TYPE_NAME_MAX];
 } disk_image_t;
 
 static disk_image_t images[SOLAR_OS_DISK_IMAGE_MAX];
@@ -160,12 +165,18 @@ static esp_err_t transfer(disk_image_t *image, uint32_t offset, void *data, size
         offset > image->size || length > image->size - offset) return ESP_ERR_INVALID_SIZE;
     _lock_acquire(&image->io_lock);
     esp_err_t err = ESP_OK;
-    if (lseek(image->fd, offset, SEEK_SET) != (off_t)offset) err = ESP_FAIL;
-    for (size_t done = 0; err == ESP_OK && done < length;) {
-        ssize_t n = write_data ? write(image->fd, (const uint8_t *)data + done, length - done) :
-            read(image->fd, (uint8_t *)data + done, length - done);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) err = ESP_FAIL; else done += (size_t)n;
+    if (image->device) {
+        if (length) err = write_data ?
+            image->device->write(image->device_context, offset, data, length) :
+            image->device->read(image->device_context, offset, data, length);
+    } else {
+        if (lseek(image->fd, offset, SEEK_SET) != (off_t)offset) err = ESP_FAIL;
+        for (size_t done = 0; err == ESP_OK && done < length;) {
+            ssize_t n = write_data ? write(image->fd, (const uint8_t *)data + done, length - done) :
+                read(image->fd, (uint8_t *)data + done, length - done);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) err = ESP_FAIL; else done += (size_t)n;
+        }
     }
     _lock_release(&image->io_lock);
     return err;
@@ -173,6 +184,7 @@ static esp_err_t transfer(disk_image_t *image, uint32_t offset, void *data, size
 
 static esp_err_t sync_image(disk_image_t *image)
 {
+    if (image->device) return ESP_OK; /* Device writes complete before returning. */
     _lock_acquire(&image->io_lock);
     esp_err_t err = fsync(image->fd) == 0 ? ESP_OK : ESP_FAIL;
     _lock_release(&image->io_lock);
@@ -182,9 +194,11 @@ static esp_err_t sync_image(disk_image_t *image)
 static esp_err_t close_locked(disk_image_t *image)
 {
     esp_err_t err = sync_image(image);
-    if (close(image->fd) && err == ESP_OK) err = ESP_FAIL;
+    if (!image->device && close(image->fd) && err == ESP_OK) err = ESP_FAIL;
     image->handle = 0; image->owner = NULL; image->fd = -1;
     image->mounted = false; image->registered = false; image->mount[0] = '\0';
+    image->device = NULL; image->device_context = NULL;
+    image->name[0] = '\0'; image->type_name[0] = '\0';
     return err;
 }
 
@@ -307,6 +321,21 @@ static void unregister_drive(disk_image_t *image)
     image->registered = false;
 }
 
+/* Caller holds images_lock. Rejects mounts that would hide existing mounts or
+ * their backing files. */
+static esp_err_t check_mount_point_locked(const char *mount)
+{
+    for (size_t i = 0; i < solar_os_storage_mount_count(); ++i) {
+        solar_os_storage_mount_info_t info;
+        if (solar_os_storage_get_mount(i, &info) && (path_under(info.mount_point, mount) ||
+            (info.type == SOLAR_OS_STORAGE_MOUNT_IMAGE && path_under(mount, info.mount_point))))
+            return ESP_ERR_INVALID_STATE;
+    }
+    for (unsigned i = 0; i < SOLAR_OS_DISK_IMAGE_MAX; ++i)
+        if (images[i].handle && path_under(images[i].path, mount)) return ESP_ERR_INVALID_STATE;
+    return ESP_OK;
+}
+
 esp_err_t solar_os_disk_image_mount(const char *path, const char *mount_point, unsigned partition)
 {
     if (!mount_point || mount_point[0] != '/' || !strcmp(mount_point, "/") ||
@@ -316,16 +345,7 @@ esp_err_t solar_os_disk_image_mount(const char *path, const char *mount_point, u
     if (err != ESP_OK) return err;
     if (!strcmp(mount, "/")) return ESP_ERR_INVALID_ARG;
     _lock_acquire_recursive(&images_lock);
-    /* Reject mounts that would hide existing mounts or their backing files. */
-    for (size_t i = 0; i < solar_os_storage_mount_count(); ++i) {
-        solar_os_storage_mount_info_t info;
-        if (solar_os_storage_get_mount(i, &info) && (path_under(info.mount_point, mount) ||
-            (info.type == SOLAR_OS_STORAGE_MOUNT_IMAGE && path_under(mount, info.mount_point)))) {
-            err = ESP_ERR_INVALID_STATE; break;
-        }
-    }
-    for (unsigned i = 0; err == ESP_OK && i < SOLAR_OS_DISK_IMAGE_MAX; ++i)
-        if (images[i].handle && path_under(images[i].path, mount)) err = ESP_ERR_INVALID_STATE;
+    err = check_mount_point_locked(mount);
     disk_image_t *image = NULL;
     if (err == ESP_OK) err = open_locked(path, &mount_owner, O_RDWR, &image);
     if (err == ESP_OK && path_under(image->path, mount)) err = ESP_ERR_INVALID_STATE;
@@ -353,6 +373,19 @@ esp_err_t solar_os_disk_image_mount(const char *path, const char *mount_point, u
     return err;
 }
 
+/* Caller holds images_lock. */
+static esp_err_t unmount_locked(disk_image_t *image)
+{
+    esp_err_t err = sync_image(image);
+    if (err != ESP_OK) return err; /* Keep the mount and claim for a retry. */
+    char drive[3] = {'0' + image->volume, ':', 0};
+    if (f_mount(NULL, drive, 0) != FR_OK) return ESP_FAIL;
+    err = esp_vfs_fat_unregister_path(image->mount);
+    unregister_drive(image);
+    esp_err_t close_err = close_locked(image);
+    return err == ESP_OK ? close_err : err;
+}
+
 esp_err_t solar_os_disk_image_unmount(const char *target)
 {
     if (!target) return ESP_ERR_NOT_FOUND;
@@ -361,15 +394,95 @@ esp_err_t solar_os_disk_image_unmount(const char *target)
     for (unsigned i = 0; i < SOLAR_OS_DISK_IMAGE_MAX; ++i) {
         disk_image_t *image = &images[i];
         char name[12]; snprintf(name, sizeof(name), "img%u", i);
-        if (!image->mounted || (strcmp(target, image->mount) && strcmp(target, name) && strcasecmp(target, image->path))) continue;
-        err = sync_image(image);
-        if (err != ESP_OK) break; /* Keep the mount and claim for a retry. */
-        char drive[3] = {'0' + image->volume, ':', 0};
-        if (f_mount(NULL, drive, 0) != FR_OK) { err = ESP_FAIL; break; }
-        err = esp_vfs_fat_unregister_path(image->mount);
-        unregister_drive(image);
-        esp_err_t close_err = close_locked(image);
-        if (err == ESP_OK) err = close_err;
+        const char *block_name = image->device ? image->name : name;
+        if (!image->mounted || (strcmp(target, image->mount) && strcmp(target, block_name) &&
+            (image->device || strcasecmp(target, image->path)))) continue;
+        err = unmount_locked(image);
+        break;
+    }
+    _lock_release_recursive(&images_lock);
+    return err;
+}
+
+esp_err_t solar_os_disk_image_attach_device(const char *name, const char *type_name,
+                                            const solar_os_disk_image_device_t *device,
+                                            void *context, uint32_t size,
+                                            const char *mount_point,
+                                            void *work, size_t work_size)
+{
+    if (!name || !name[0] || strlen(name) >= sizeof(images[0].name) ||
+        !type_name || !type_name[0] || strlen(type_name) >= sizeof(images[0].type_name) ||
+        !device || !device->read || !device->write || !work ||
+        work_size < SOLAR_OS_DISK_IMAGE_FORMAT_WORK_BYTES || !mount_point ||
+        mount_point[0] != '/' || strlen(mount_point) >= sizeof(images[0].mount))
+        return ESP_ERR_INVALID_ARG;
+    if (size < SOLAR_OS_DISK_IMAGE_DEVICE_MIN_BYTES || size % 512U ||
+        size > SOLAR_OS_DISK_IMAGE_MAX_BYTES) return ESP_ERR_INVALID_SIZE;
+    char mount[SOLAR_OS_STORAGE_MOUNT_POINT_MAX];
+    esp_err_t err = solar_os_storage_join_path("/", mount_point, mount, sizeof(mount));
+    if (err != ESP_OK) return err;
+    if (!strcmp(mount, "/")) return ESP_ERR_INVALID_ARG;
+    _lock_acquire_recursive(&images_lock);
+    err = check_mount_point_locked(mount);
+    disk_image_t *image = NULL;
+    for (unsigned i = 0; err == ESP_OK && i < SOLAR_OS_DISK_IMAGE_MAX; ++i) {
+        if (images[i].handle && images[i].device && !strcmp(images[i].name, name)) {
+            err = ESP_ERR_INVALID_STATE;
+        } else if (!images[i].handle && !image) {
+            image = &images[i];
+        }
+    }
+    if (err == ESP_OK && !image) err = ESP_ERR_NO_MEM;
+    if (err != ESP_OK) image = NULL;
+    if (image) {
+        /* Do not reset io_lock: its lifetime is the static slot's lifetime. */
+        image->fd = -1; image->size = size; image->owner = &mount_owner;
+        memset(&image->identity, 0, sizeof(image->identity));
+        image->path[0] = '\0'; image->backing[0] = '\0';
+        image->device = device; image->device_context = context;
+        strlcpy(image->name, name, sizeof(image->name));
+        strlcpy(image->type_name, type_name, sizeof(image->type_name));
+        if (++next_handle == 0) ++next_handle;
+        image->handle = next_handle;
+        err = register_drive(image, 0);
+    }
+    FATFS *fs = NULL;
+    bool vfs_registered = false;
+    char drive[3] = {0};
+    if (err == ESP_OK) {
+        drive[0] = '0' + image->volume; drive[1] = ':';
+        /* No partition table, and one FAT: the volume lives only until the
+         * device loses power. */
+        const MKFS_PARM options = {.fmt = FM_ANY | FM_SFD, .n_fat = 1};
+        if (f_mkfs(drive, &options, work, (UINT)work_size) != FR_OK) err = ESP_FAIL;
+    }
+    if (err == ESP_OK) {
+        esp_vfs_fat_conf_t conf = {.base_path = mount, .fat_drive = drive, .max_files = 8};
+        err = esp_vfs_fat_register_cfg(&conf, &fs);
+        vfs_registered = err == ESP_OK;
+        if (err == ESP_OK && f_mount(fs, drive, 1) != FR_OK) err = ESP_FAIL;
+    }
+    if (err == ESP_OK) {
+        strlcpy(image->mount, mount, sizeof(image->mount)); image->mounted = true;
+    } else if (image) {
+        if (vfs_registered) { (void)f_mount(NULL, drive, 0); (void)esp_vfs_fat_unregister_path(mount); }
+        unregister_drive(image); (void)close_locked(image);
+    }
+    _lock_release_recursive(&images_lock);
+    return err;
+}
+
+esp_err_t solar_os_disk_image_detach_device(const char *mount_point)
+{
+    if (!mount_point) return ESP_ERR_INVALID_ARG;
+    char mount[SOLAR_OS_STORAGE_MOUNT_POINT_MAX];
+    if (solar_os_storage_join_path("/", mount_point, mount, sizeof(mount)) != ESP_OK)
+        return ESP_ERR_NOT_FOUND;
+    _lock_acquire_recursive(&images_lock);
+    esp_err_t err = ESP_ERR_NOT_FOUND;
+    for (unsigned i = 0; i < SOLAR_OS_DISK_IMAGE_MAX; ++i) {
+        if (!images[i].mounted || !images[i].device || strcmp(images[i].mount, mount)) continue;
+        err = unmount_locked(&images[i]);
         break;
     }
     _lock_release_recursive(&images_lock);
@@ -463,11 +576,13 @@ bool solar_os_disk_image_get_block(size_t index, solar_os_storage_block_t *block
         if (!image->mounted) continue;
         if (index--) continue;
         memset(block, 0, sizeof(*block));
-        snprintf(block->name, sizeof(block->name), "img%u", i);
+        if (image->device) strlcpy(block->name, image->name, sizeof(block->name));
+        else snprintf(block->name, sizeof(block->name), "img%u", i);
         block->type = SOLAR_OS_STORAGE_BLOCK_DISK; block->mounted = true; block->mountable = true;
         block->logical_volume = image->volume; block->partition_number = image->partition;
         block->sector_size = 512; block->sector_count = image->size / 512U; block->size_bytes = image->size;
-        strlcpy(block->fs, "FAT", sizeof(block->fs)); strlcpy(block->type_name, "image", sizeof(block->type_name));
+        strlcpy(block->fs, "FAT", sizeof(block->fs));
+        strlcpy(block->type_name, image->device ? image->type_name : "image", sizeof(block->type_name));
         strlcpy(block->mount_point, image->mount, sizeof(block->mount_point));
         _lock_release_recursive(&images_lock);
         return true;
