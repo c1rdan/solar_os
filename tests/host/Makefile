@@ -16,6 +16,7 @@ KEYMAP_INPUTS := $(wildcard $(ROOT)/keymaps/profiles/*.json) $(ROOT)/scripts/gen
 
 TARGETS += lr11xx_test lr11xx_service_test
 TARGETS += can_twai_test
+TARGETS += picocalc_codec_test board_display_brightness_test
 TARGETS += doc_memory_test
 TARGETS += paged_array_test
 
@@ -1067,6 +1068,14 @@ cl32_keyboard_test: cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyb
 	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
 		cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyboard.c -o $@
 
+board_display_brightness_test: board_display_brightness_test.c $(ROOT)/src/board/solar_os_board_display_expansion.c $(ROOT)/src/board/solar_os_board_display.h
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h -I. -I$(ROOT)/src/board -I$(ROOT)/src/services -I$(ROOT)/components/u8g2/src/clib \
+		board_display_brightness_test.c $(ROOT)/src/board/solar_os_board_display_expansion.c -o $@
+
+picocalc_codec_test: picocalc_codec_test.c $(ROOT)/src/services/solar_os_picocalc_codec.c $(ROOT)/src/services/solar_os_picocalc_codec.h
+	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
+		picocalc_codec_test.c $(ROOT)/src/services/solar_os_picocalc_codec.c -o $@
+
 battery_service_test: battery_service_test.c $(ROOT)/src/services/solar_os_battery.c $(ROOT)/src/services/solar_os_battery.h $(ROOT)/src/services/solar_os_battery_trend.c $(ROOT)/src/services/solar_os_battery_trend.h nvs.h freertos/FreeRTOS.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h -I. -I$(ROOT)/src/services \
 		battery_service_test.c $(ROOT)/src/services/solar_os_battery.c \
@@ -1363,6 +1372,8 @@ test: $(TARGETS)
 	./matrix_keyboard_test
 	./input_keymap_service_test
 	./cl32_keyboard_test
+	./picocalc_codec_test
+	./board_display_brightness_test
 	./battery_service_test
 	./batmon_job_test
 	./camera_service_test

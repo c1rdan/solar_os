@@ -77,6 +77,7 @@ class BoardManifestTest(unittest.TestCase):
         for name, expected in (
             ("t_deck_plus", 1), ("t_lora_pager", 1), ("cl_32", 1),
             ("thinknode_m9", 1), ("ttgo_vga32_v14", 1),
+            ("picocalc_esp32_s3_pico", 1),
             ("solar_term", 0), ("esp32_s3_devkitc1_n16r8", 0), ("odroid_go", 0),
         ):
             with self.subTest(board=name):

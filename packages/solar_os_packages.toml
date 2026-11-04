@@ -874,6 +874,12 @@ category = "Internal"
 hidden = true
 members = ["board_cl32_core"]
 
+[groups.picocalc_core]
+label = "Clockwork PicoCalc controller"
+category = "Internal"
+hidden = true
+members = ["board_picocalc_core"]
+
 [groups.lilygo_pager_keyboard]
 label = "LilyGO T-LoRa-Pager keyboard"
 category = "Expansion hardware"
@@ -2168,6 +2174,19 @@ sources = [
   "services/solar_os_cl32_core.c",
   "services/solar_os_cl32_core_driver.c",
   "services/solar_os_cl32_keyboard.c",
+]
+requires = ["esp_driver_i2c"]
+capabilities = ["i2c"]
+
+[packages.board_picocalc_core]
+label = "board.picocalc-core"
+targets = ["esp32s3"]
+expansion_drivers = ["solar_os_picocalc_core_expansion_driver"]
+depends = ["service_battery", "service_expansion", "service_i2c"]
+sources = [
+  "services/solar_os_picocalc_codec.c",
+  "services/solar_os_picocalc_core.c",
+  "services/solar_os_picocalc_core_driver.c",
 ]
 requires = ["esp_driver_i2c"]
 capabilities = ["i2c"]

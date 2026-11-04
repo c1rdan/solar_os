@@ -188,11 +188,11 @@ notes = "GNSS starts powered off; use `gnss power on`. The default profile uses 
 
 [devices.picocalc_esp32_s3_pico]
 display = "320×320 ST7365P/ILI9488-class SPI LCD."
-keyboard = "None attached yet; the mainboard's keyboard controller is not supported yet."
+keyboard = "Built-in QWERTY keyboard with a four-way pad and a backlight, read through the mainboard controller."
 sound = "None attached yet."
 storage = "microSD over one-bit SDMMC."
 connectivity = "Wi-Fi, BLE, and native USB CDC through the module's USB-C port."
-power = "None attached yet."
+power = "Battery percentage and charging state through the mainboard controller; orderly power-off."
 sensors = "None."
 expansion = "UART, GPIO, ADC, and PWM on the free Pico header pins."
 notes = "ESP32-S3R2 module (16 MB flash, 2 MB quad PSRAM) replacing the Pico in a Clockwork PicoCalc. Flash and use the console through the module's own USB-C port."

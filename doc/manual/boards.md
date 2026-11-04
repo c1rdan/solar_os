@@ -1660,14 +1660,39 @@ Current state (staged bring-up):
   20 MHz (the datasheet write cycle is about 15 MHz, and other ESP32-S3 ports
   run this panel at 40 MHz; raise `SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ` to try
   it). If red and blue are swapped, set `SOLAR_OS_BOARD_DISPLAY_MADCTL` to
-  `0x48`. Its backlight is controlled by the keyboard MCU, not by a GPIO, so it
-  keeps the MCU's default brightness until the MCU driver is attached.
+  `0x48`.
+- Keyboard, battery, backlights and power: the mainboard's STM32 controller
+  (`core0`, I2C address 0x1f on a private 10 kHz bus) supplies `keyboard0`,
+  `battery0`, both backlights and the system power-off. It only runs while the
+  PicoCalc itself is powered; on the module's own USB power it does not answer,
+  the keyboard stays not ready and polling resumes once it appears. The
+  optional `gap` binding (milliseconds, default 16) is the wait between
+  writing a register number and reading it back; lower it only after testing.
+- Keys: the controller has already applied Shift, Caps Lock and the symbol
+  layer, so SolarOS receives finished characters. Ctrl and Alt are passed as
+  modifiers. Shift+Up/Down arrive as Page Up/Down, Shift+Tab is Home,
+  Shift+Del is End, Shift+Esc is Break (app exit), and Shift+F1 to F5 are F6
+  to F10. Insert is not supported. Held keys repeat at the SolarOS repeat
+  rate, not the controller's. Alt+`,` and Alt+`.` change the LCD backlight and
+  Alt+Space cycles the keyboard backlight inside the controller itself.
+- Battery: the controller reports the charge percentage and whether it is
+  charging, but no voltage, so the voltage `battery` shows is an estimate
+  derived from the percentage. The first reading can be inaccurate until a
+  full charge cycle completes. With no battery, `battery` reports no reading.
+- Backlights: `setterm brightness` drives the LCD backlight and
+  `setterm backlight` the keyboard backlight. The controller quantises both
+  and never turns the LCD fully off (its lowest step is about 6 percent).
+- Power: a short press of the power key requests an orderly shutdown; holding
+  it makes the controller cut power outright. `shutdown` stops everything,
+  flushes storage, and asks the controller to remove power after six seconds.
+- Wake: there is no interrupt line from the controller to the module, so a key
+  press cannot wake the system from sleep.
 - Storage: the microSD slot (`storage0`) is used in one-bit SDMMC mode on
   CLK1/CMD2/DAT0=42. DAT1 and DAT2 are not wired on the mainboard, so one bit is
   the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card
   stays in SD mode. The mainboard has no pull-ups on these lines, so the
   module's internal pull-ups are used; if a card is unreliable, try another card.
-- No keyboard, battery, audio or LED driver is attached yet.
+- No audio or LED driver is attached yet.
 
 ```sh
 pio run -e picocalc_esp32_s3_pico

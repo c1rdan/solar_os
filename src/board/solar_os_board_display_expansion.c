@@ -3,9 +3,73 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 static solar_os_board_display_t *primary_display;
 static portMUX_TYPE primary_display_lock = portMUX_INITIALIZER_UNLOCKED;
+
+/* Externally provided brightness (see the header). The mutex serialises the
+ * provider callback with binding and unbinding; the spinlock only guards the
+ * small shared fields so brightness queries never block on a slow callback. */
+static portMUX_TYPE brightness_lock = portMUX_INITIALIZER_UNLOCKED;
+static StaticSemaphore_t brightness_mutex_storage;
+static SemaphoreHandle_t brightness_mutex;
+static solar_os_board_display_brightness_fn_t brightness_provider;
+static void *brightness_provider_user;
+static uint8_t brightness_requested = 100U;
+
+static SemaphoreHandle_t brightness_mutex_get(void)
+{
+    portENTER_CRITICAL(&brightness_lock);
+    if (brightness_mutex == NULL) {
+        brightness_mutex = xSemaphoreCreateMutexStatic(&brightness_mutex_storage);
+    }
+    SemaphoreHandle_t mutex = brightness_mutex;
+    portEXIT_CRITICAL(&brightness_lock);
+    return mutex;
+}
+
+static bool brightness_provider_bound(void)
+{
+    portENTER_CRITICAL(&brightness_lock);
+    const bool bound = brightness_provider != NULL;
+    portEXIT_CRITICAL(&brightness_lock);
+    return bound;
+}
+
+esp_err_t solar_os_board_display_set_brightness_provider(
+    solar_os_board_display_brightness_fn_t set, void *user)
+{
+    if (set == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    SemaphoreHandle_t mutex = brightness_mutex_get();
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&brightness_lock);
+    const bool taken = brightness_provider != NULL;
+    if (!taken) {
+        brightness_provider = set;
+        brightness_provider_user = user;
+    }
+    const uint8_t percent = brightness_requested;
+    portEXIT_CRITICAL(&brightness_lock);
+    esp_err_t err = taken ? ESP_ERR_INVALID_STATE : set(user, percent);
+    xSemaphoreGive(mutex);
+    return err;
+}
+
+void solar_os_board_display_clear_brightness_provider(void *user)
+{
+    SemaphoreHandle_t mutex = brightness_mutex_get();
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&brightness_lock);
+    if (brightness_provider != NULL && brightness_provider_user == user) {
+        brightness_provider = NULL;
+        brightness_provider_user = NULL;
+    }
+    portEXIT_CRITICAL(&brightness_lock);
+    xSemaphoreGive(mutex);
+}
 
 esp_err_t solar_os_board_display_register_primary(solar_os_board_display_t *display)
 {
@@ -141,6 +205,9 @@ uint32_t solar_os_board_display_max_stream_pixels_per_second(
 
 bool solar_os_board_display_brightness_supported(const solar_os_board_display_t *display)
 {
+    if (display != NULL && brightness_provider_bound()) {
+        return true;
+    }
     return display != NULL && display->ops != NULL &&
         display->ops->brightness_supported != NULL &&
         display->ops->brightness_supported(display);
@@ -152,6 +219,12 @@ esp_err_t solar_os_board_display_get_brightness(const solar_os_board_display_t *
     if (percent == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (display != NULL && brightness_provider_bound()) {
+        portENTER_CRITICAL(&brightness_lock);
+        *percent = brightness_requested;
+        portEXIT_CRITICAL(&brightness_lock);
+        return ESP_OK;
+    }
     return display != NULL && display->ops != NULL && display->ops->get_brightness != NULL ?
         display->ops->get_brightness(display, percent) : ESP_ERR_NOT_SUPPORTED;
 }
@@ -159,8 +232,34 @@ esp_err_t solar_os_board_display_get_brightness(const solar_os_board_display_t *
 esp_err_t solar_os_board_display_set_brightness(solar_os_board_display_t *display,
                                                 uint8_t percent)
 {
-    return display != NULL && display->ops != NULL && display->ops->set_brightness != NULL ?
-        display->ops->set_brightness(display, percent) : ESP_ERR_NOT_SUPPORTED;
+    if (display == NULL) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (percent > 100U) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    /* Remember the request even when nothing can honour it yet, so a provider
+     * that binds later starts at the level the display service restored. */
+    portENTER_CRITICAL(&brightness_lock);
+    brightness_requested = percent;
+    portEXIT_CRITICAL(&brightness_lock);
+
+    SemaphoreHandle_t mutex = brightness_mutex_get();
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&brightness_lock);
+    solar_os_board_display_brightness_fn_t provider = brightness_provider;
+    void *user = brightness_provider_user;
+    portEXIT_CRITICAL(&brightness_lock);
+    esp_err_t err;
+    if (provider != NULL) {
+        err = provider(user, percent);
+    } else {
+        err = display->ops != NULL && display->ops->set_brightness != NULL ?
+            display->ops->set_brightness(display, percent) : ESP_ERR_NOT_SUPPORTED;
+    }
+    xSemaphoreGive(mutex);
+    return err;
 }
 
 esp_err_t solar_os_board_display_set_colors(solar_os_board_display_t *display,

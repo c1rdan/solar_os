@@ -232,6 +232,35 @@ hint = "0x08"
 required = true
 allowed = [0x08]
 
+[drivers.picocalc-core]
+keyboard = true
+summary = "Clockwork PicoCalc keyboard and power controller"
+package = "board_picocalc_core"
+targets = ["esp32s3"]
+capabilities = ["i2c"]
+board_capabilities = ["battery"]
+default_name = "core0"
+
+[[drivers.picocalc-core.bindings]]
+key = "i2c"
+kind = "i2c_bus"
+hint = "bus"
+required = true
+
+[[drivers.picocalc-core.bindings]]
+key = "addr"
+kind = "i2c_address"
+hint = "0x1f"
+required = true
+allowed = [0x1f]
+
+[[drivers.picocalc-core.bindings]]
+key = "gap"
+kind = "parameter"
+hint = "ms"
+min = 0
+max = 50
+
 [drivers.twai-can]
 summary = "ESP32 TWAI classic CAN controller"
 package = "can_twai"

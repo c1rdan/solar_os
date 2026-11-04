@@ -16,6 +16,7 @@ drivers = [
   "uart_esp_idf",
   "display_st7365p",
   "storage_expansion",
+  "battery_expansion",
   "i2c_esp_idf",
   "spi_esp_idf",
   "gpio_esp_idf",
@@ -24,8 +25,8 @@ drivers = [
 ]
 capabilities = [
   "streaming_display",
-  "psram", "simd", "display", "gfx",
-  "cdc", "uart", "sd", "i2c", "spi",
+  "psram", "simd", "display", "gfx", "display_brightness",
+  "cdc", "uart", "sd", "i2c", "spi", "battery",
   "wifi", "ble", "gpio", "adc", "pwm", "key",
   "expansion_gpio", "expansion_i2c", "expansion_spi", "expansion_uart",
   "expansion_adc", "expansion_pwm",
@@ -40,6 +41,8 @@ psram_bytes = 2097152
 # request for SPI mode, so hold it high before the SD driver starts: the card
 # is used in 1-bit SDMMC mode.
 SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}}'
+# The keyboard/power controller can cut the whole system supply.
+SOLAR_OS_BOARD_POWEROFF_PROVIDER = '"core0"'
 # The PicoCalc panel is a 320x320 ST7365P/ILI9488-class LCD. Colours are
 # streamed as RGB565 (the vendor firmware uses 18-bit); see st7365p in
 # src/drivers/tft_ili9341.c.
@@ -124,6 +127,13 @@ baud_rate = "SOLAR_OS_BUS_UART_DEFAULT_BAUD_RATE"
 driver = "st7365p"
 name = "display0"
 bindings = { spi = "spi0", cs = 38, dc = 39, reset = 40 }
+
+# The mainboard's STM32 provides the keyboard, battery, both backlights and the
+# system power switch. It only runs on PicoCalc power.
+[[devices]]
+driver = "picocalc-core"
+name = "core0"
+bindings = { i2c = "i2c0", addr = 0x1f }
 
 # TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard.
 [[devices]]

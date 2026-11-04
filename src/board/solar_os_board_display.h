@@ -92,6 +92,20 @@ esp_err_t solar_os_board_display_get_brightness(const solar_os_board_display_t *
                                                 uint8_t *percent);
 esp_err_t solar_os_board_display_set_brightness(solar_os_board_display_t *display,
                                                 uint8_t percent);
+
+/* A board controller that owns the panel backlight (for example an I2C power
+ * MCU, with no GPIO the display driver could drive) can take over brightness
+ * for the primary display. The callback runs serialised with binding and
+ * unbinding and must not call back into the display service.
+ *
+ * The last requested level is remembered even while no provider is bound, and
+ * is applied as soon as one binds: the display service restores the saved
+ * brightness at start-up, before such a controller has attached. */
+typedef esp_err_t (*solar_os_board_display_brightness_fn_t)(void *user, uint8_t percent);
+esp_err_t solar_os_board_display_set_brightness_provider(
+    solar_os_board_display_brightness_fn_t set, void *user);
+/* Unbind the provider if it belongs to user. Waits for an in-flight callback. */
+void solar_os_board_display_clear_brightness_provider(void *user);
 esp_err_t solar_os_board_display_set_colors(solar_os_board_display_t *display,
                                             uint32_t foreground_rgb888,
                                             uint32_t background_rgb888);
