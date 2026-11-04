@@ -4,6 +4,8 @@
 #include <string.h>
 
 #include "driver/spi_master.h"
+#include "esp_timer.h"
+#include "freertos/task.h"
 #include "solar_os_memory.h"
 #include "spi_psram.h"
 
@@ -36,6 +38,32 @@ static bool fail_bus_init;
 
 struct spi_device { int unused; };
 static struct spi_device the_device;
+
+/* Time advances by each burst's wire time plus a fixed software cost, and by a
+ * tick for every sleep. */
+#define TRANSACTION_OVERHEAD_NS 10000ULL
+static uint64_t now_ns;
+static unsigned yields;
+static bool bus_held;
+int64_t esp_timer_get_time(void) { return (int64_t)(now_ns / 1000ULL); }
+void vTaskDelay(TickType_t ticks)
+{
+    assert(ticks > 0);
+    yields++;
+    now_ns += 1000000ULL * ticks;
+}
+esp_err_t spi_device_acquire_bus(spi_device_handle_t handle, TickType_t wait)
+{
+    (void)wait;
+    assert(handle == &the_device && !bus_held);
+    bus_held = true;
+    return ESP_OK;
+}
+void spi_device_release_bus(spi_device_handle_t handle)
+{
+    assert(handle == &the_device && bus_held);
+    bus_held = false;
+}
 
 const char *esp_err_to_name(esp_err_t err) { (void)err; return "error"; }
 void esp_rom_delay_us(uint32_t us) { (void)us; }
@@ -157,7 +185,12 @@ esp_err_t spi_device_polling_transmit(spi_device_handle_t handle, spi_transactio
         assert(bytes % 4U == 0U);
         /* Eight command clocks, six address clocks, the wait cycles, then two
          * clocks per data byte. */
-        check_ce_time(8U + 6U + ext->dummy_bits + bytes * 2U);
+        const size_t clocks = 8U + 6U + ext->dummy_bits + bytes * 2U;
+        check_ce_time(clocks);
+        /* Data transfers hold the bus for their whole run of bursts. */
+        assert(bus_held);
+        now_ns += (uint64_t)clocks * 1000000000ULL / (uint64_t)device_state.config.clock_speed_hz +
+            TRANSACTION_OVERHEAD_NS;
         if (bytes > largest_burst) {
             largest_burst = bytes;
         }
@@ -373,6 +406,44 @@ static void test_transfers_at_clock(uint32_t clock_hz)
     spi_psram_close(psram);
 }
 
+/* Polling keeps the CPU busy, so a long run of transfers must sleep now and
+ * then for the idle task on that core; a short one after idle time must not. */
+static void test_long_transfers_yield(void)
+{
+    reset_model();
+    spi_psram_config_t config = make_config(20000000U);
+    spi_psram_t *psram = NULL;
+    assert(spi_psram_open(&config, &psram) == ESP_OK);
+    static uint8_t buffer[256U * 1024U];
+
+    now_ns += 50000000ULL;
+    yields = 0;
+    assert(spi_psram_write(psram, 0U, buffer, 4096U) == ESP_OK);
+    assert(yields == 0 && !bus_held);
+
+    /* Many short calls back to back count as one busy stretch. */
+    now_ns += 50000000ULL;
+    yields = 0;
+    uint64_t start = now_ns;
+    for (unsigned i = 0; i < 64U; i++) {
+        assert(spi_psram_read(psram, (i % 32U) * 4096U, buffer, 4096U) == ESP_OK);
+        assert(!bus_held);
+    }
+    uint64_t busy_ms = (now_ns - start) / 1000000ULL;
+    assert(busy_ms > 60U);
+    assert(yields >= busy_ms / 25U && yields <= busy_ms / 18U + 1U);
+
+    /* So does one long transfer. */
+    now_ns += 50000000ULL;
+    yields = 0;
+    start = now_ns;
+    assert(spi_psram_read(psram, 0U, buffer, sizeof(buffer)) == ESP_OK);
+    busy_ms = (now_ns - start) / 1000000ULL;
+    assert(yields >= busy_ms / 25U && yields <= busy_ms / 18U + 1U && yields > 0U);
+    assert(!bus_held);
+    spi_psram_close(psram);
+}
+
 static void test_bounds_and_arguments(void)
 {
     reset_model();
@@ -410,6 +481,7 @@ int main(void)
     test_transfers_at_clock(20000000U);
     test_transfers_at_clock(26000000U);
     test_transfers_at_clock(40000000U);
+    test_long_transfers_yield();
     test_bounds_and_arguments();
     puts("spi_psram_test: ok");
     return 0;

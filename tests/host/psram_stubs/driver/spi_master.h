@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
 
 typedef int spi_host_device_t;
 #define SPI2_HOST 1
@@ -71,3 +72,5 @@ esp_err_t spi_bus_add_device(spi_host_device_t host,
                              spi_device_handle_t *handle);
 esp_err_t spi_bus_remove_device(spi_device_handle_t handle);
 esp_err_t spi_device_polling_transmit(spi_device_handle_t handle, spi_transaction_t *transaction);
+esp_err_t spi_device_acquire_bus(spi_device_handle_t handle, TickType_t wait);
+void spi_device_release_bus(spi_device_handle_t handle);

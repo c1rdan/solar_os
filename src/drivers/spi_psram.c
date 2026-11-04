@@ -6,8 +6,10 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "solar_os_memory.h"
 
 #define PSRAM_CMD_RESET_ENABLE 0x66U
@@ -23,6 +25,12 @@
 /* Reset recovery (tRST is 50 us) plus margin. */
 #define PSRAM_RESET_DELAY_US 200U
 #define PSRAM_MUTEX_WAIT_MS 1000U
+/* Polling transfers keep the CPU busy without blocking. After this long of
+ * back-to-back transfers the driver sleeps for a tick, so lower-priority tasks
+ * on the same core, and its idle task that feeds the task watchdog, still run. */
+#define PSRAM_BUSY_YIELD_US 20000
+/* A gap this long between transfers counts as idle time. */
+#define PSRAM_IDLE_GAP_US 1000
 
 struct spi_psram {
     spi_psram_config_t config;
@@ -36,6 +44,8 @@ struct spi_psram {
     size_t burst_limit;
     uint32_t size;
     uint8_t id[PSRAM_ID_BYTES];
+    int64_t busy_since_us;
+    int64_t last_end_us;
 };
 
 static const char *TAG = "spi-psram";
@@ -284,8 +294,17 @@ static esp_err_t transfer(spi_psram_t *psram,
     if (xSemaphoreTake(psram->mutex, pdMS_TO_TICKS(PSRAM_MUTEX_WAIT_MS)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
-    esp_err_t err = ESP_OK;
+    if (esp_timer_get_time() - psram->last_end_us > PSRAM_IDLE_GAP_US) {
+        psram->busy_since_us = esp_timer_get_time();
+    }
+    /* Holding the bus for the whole transfer saves a lock round trip per burst. */
+    esp_err_t err = spi_device_acquire_bus(psram->device, portMAX_DELAY);
+    const bool acquired = err == ESP_OK;
     while (length > 0U && err == ESP_OK) {
+        if (esp_timer_get_time() - psram->busy_since_us > PSRAM_BUSY_YIELD_US) {
+            vTaskDelay(1);
+            psram->busy_since_us = esp_timer_get_time();
+        }
         const size_t burst = spi_psram_next_burst(address, length, psram->burst_limit);
         if (write_from != NULL) {
             memcpy(psram->bounce, write_from, burst);
@@ -301,6 +320,10 @@ static esp_err_t transfer(spi_psram_t *psram,
         address += (uint32_t)burst;
         length -= burst;
     }
+    if (acquired) {
+        spi_device_release_bus(psram->device);
+    }
+    psram->last_end_us = esp_timer_get_time();
     xSemaphoreGive(psram->mutex);
     return err;
 }
