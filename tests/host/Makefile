@@ -16,7 +16,7 @@ KEYMAP_INPUTS := $(wildcard $(ROOT)/keymaps/profiles/*.json) $(ROOT)/scripts/gen
 
 TARGETS += lr11xx_test lr11xx_service_test
 TARGETS += can_twai_test
-TARGETS += picocalc_codec_test board_display_brightness_test
+TARGETS += picocalc_codec_test board_display_brightness_test card_detect_test
 TARGETS += doc_memory_test
 TARGETS += paged_array_test
 
@@ -282,9 +282,9 @@ uc8279_expansion_test: uc8279_expansion_test.c $(ROOT)/src/services/solar_os_uc8
 		-I$(ROOT)/src/services -I$(ROOT)/src/drivers -I$(ROOT)/src/board \
 		-I$(ROOT)/components/u8g2/src/clib uc8279_expansion_test.c -o $@
 
-sdmmc_expansion_test: sdmmc_expansion_test.c $(ROOT)/src/services/solar_os_sdmmc.c $(ROOT)/src/services/solar_os_sdmmc_driver.c
+sdmmc_expansion_test: sdmmc_expansion_test.c $(ROOT)/src/services/solar_os_sdmmc.c $(ROOT)/src/services/solar_os_sdmmc_driver.c $(ROOT)/src/services/solar_os_card_detect.c $(wildcard sdmmc_stubs/*.h sdmmc_stubs/*/*.h)
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h \
-		-Iexpansion_stubs -I. -I$(ROOT)/include -I$(ROOT)/src/services -I$(ROOT)/src/drivers sdmmc_expansion_test.c -o $@
+		-Isdmmc_stubs -Iexpansion_stubs -I. -I$(ROOT)/include -I$(ROOT)/src/services -I$(ROOT)/src/drivers sdmmc_expansion_test.c $(ROOT)/src/services/solar_os_card_detect.c -o $@
 
 gt911_test: gt911_test.c $(ROOT)/src/drivers/gt911.c $(ROOT)/src/drivers/gt911.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h -Iepd_stubs -I. gt911_test.c -o $@
@@ -1068,6 +1068,10 @@ cl32_keyboard_test: cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyb
 	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
 		cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyboard.c -o $@
 
+card_detect_test: card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c $(ROOT)/src/services/solar_os_card_detect.h
+	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
+		card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c -o $@
+
 board_display_brightness_test: board_display_brightness_test.c $(ROOT)/src/board/solar_os_board_display_expansion.c $(ROOT)/src/board/solar_os_board_display.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h -I. -I$(ROOT)/src/board -I$(ROOT)/src/services -I$(ROOT)/components/u8g2/src/clib \
 		board_display_brightness_test.c $(ROOT)/src/board/solar_os_board_display_expansion.c -o $@
@@ -1374,6 +1378,7 @@ test: $(TARGETS)
 	./cl32_keyboard_test
 	./picocalc_codec_test
 	./board_display_brightness_test
+	./card_detect_test
 	./battery_service_test
 	./batmon_job_test
 	./camera_service_test

@@ -135,11 +135,13 @@ driver = "picocalc-core"
 name = "core0"
 bindings = { i2c = "i2c0", addr = 0x1f }
 
-# TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard.
+# TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard. The
+# slot's card-detect switch (Pico GP22) pulls the line low when a card is
+# seated, which is the driver's default polarity.
 [[devices]]
 driver = "sdmmc"
 name = "storage0"
-bindings = { clk = 1, cmd = 2, d0 = 42 }
+bindings = { clk = 1, cmd = 2, d0 = 42, cd = 6 }
 
 [[pins]]
 gpio = 0

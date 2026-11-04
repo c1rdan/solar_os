@@ -2429,6 +2429,7 @@ depends = ["service_expansion"]
 sources = [
   "board/solar_os_board_storage_sd.c",
   "drivers/sd_card.c",
+  "services/solar_os_card_detect.c",
   "services/solar_os_sdmmc.c",
   "services/solar_os_sdmmc_driver.c",
 ]

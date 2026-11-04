@@ -1692,6 +1692,10 @@ Current state (staged bring-up):
   the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card
   stays in SD mode. The mainboard has no pull-ups on these lines, so the
   module's internal pull-ups are used; if a card is unreliable, try another card.
+  The slot's card-detect switch (GPIO6) is polled: inserting a card mounts it
+  and removing it unmounts the volume, after about three quarters of a second
+  of stable state. Remove a card only when nothing is writing to it, because a
+  card pulled mid-write can lose data.
 - No audio or LED driver is attached yet.
 
 ```sh

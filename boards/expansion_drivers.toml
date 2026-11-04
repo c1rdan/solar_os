@@ -1381,6 +1381,18 @@ hint = "0|1"
 min = 0
 max = 1
 
+[[drivers.sdmmc.bindings]]
+key = "cd"
+kind = "gpio"
+hint = "gpio"
+
+[[drivers.sdmmc.bindings]]
+key = "cd_active"
+kind = "parameter"
+hint = "0|1"
+min = 0
+max = 1
+
 [drivers.ssd1306]
 summary = "SSD1306 I2C OLED"
 package = "expansion_ssd1306"

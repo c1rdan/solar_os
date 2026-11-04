@@ -576,7 +576,10 @@ class BoardManifestTest(unittest.TestCase):
         # The SD card uses one-bit SDMMC (DAT1/DAT2 are not wired) so that the
         # second SPI host stays free for the mainboard PSRAM.
         self.assertEqual(devices["storage0"]["driver"], "sdmmc")
-        self.assertEqual(devices["storage0"]["bindings"], {"clk": 1, "cmd": 2, "d0": 42})
+        # The slot's active-low card-detect switch is bound for hot-plug.
+        self.assertEqual(devices["storage0"]["bindings"],
+                         {"clk": 1, "cmd": 2, "d0": 42, "cd": 6})
+
 
         header = generate_header(board, self.drivers)
         # CD/DAT3 is held high so a card stays in SD mode.
