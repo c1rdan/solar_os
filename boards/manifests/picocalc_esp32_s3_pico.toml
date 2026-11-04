@@ -14,7 +14,7 @@ platformio_board = "picocalc_esp32_s3_pico"
 drivers = [
   "cdc_usb_serial_jtag",
   "uart_esp_idf",
-  "display_st7796",
+  "display_st7365p",
   "storage_expansion",
   "i2c_esp_idf",
   "spi_esp_idf",
@@ -40,12 +40,12 @@ psram_bytes = 2097152
 # request for SPI mode, so hold it high before the SD driver starts: the card
 # is used in 1-bit SDMMC mode.
 SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}}'
-# Interim controller selection: the PicoCalc panel (ST7365P/ILI9488-class,
-# 320x320) is driven through the ST7796 initialisation until its own driver
-# lands. Colour order and window are tuned on hardware.
-SOLAR_OS_BOARD_DISPLAY_CONTROLLER = '"ST7796"'
-SOLAR_OS_BOARD_DISPLAY_CONTROLLER_ST7796 = "1"
-SOLAR_OS_BOARD_DISPLAY_DRIVER_NAME = '"st7796"'
+# The PicoCalc panel is a 320x320 ST7365P/ILI9488-class LCD. Colours are
+# streamed as RGB565 (the vendor firmware uses 18-bit); see st7365p in
+# src/drivers/tft_ili9341.c.
+SOLAR_OS_BOARD_DISPLAY_CONTROLLER = '"ST7365P"'
+SOLAR_OS_BOARD_DISPLAY_CONTROLLER_ST7365P = "1"
+SOLAR_OS_BOARD_DISPLAY_DRIVER_NAME = '"st7365p"'
 SOLAR_OS_BOARD_DISPLAY_WIDTH = "320"
 SOLAR_OS_BOARD_DISPLAY_HEIGHT = "320"
 SOLAR_OS_BOARD_DISPLAY_NATIVE_WIDTH = "320"
@@ -121,7 +121,7 @@ rx = 44
 baud_rate = "SOLAR_OS_BUS_UART_DEFAULT_BAUD_RATE"
 
 [[devices]]
-driver = "st7796"
+driver = "st7365p"
 name = "display0"
 bindings = { spi = "spi0", cs = 38, dc = 39, reset = 40 }
 

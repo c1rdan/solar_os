@@ -526,6 +526,70 @@ class BoardManifestTest(unittest.TestCase):
         self.assertTrue(bases["esp32s3"])
         self.assertTrue(bases["esp32"])
 
+    def test_picocalc_manifest_pin_map_and_resource_constraints(self) -> None:
+        """Keep the PicoCalc's hard-won hardware facts from regressing.
+
+        The Waveshare ESP32-S3-Pico does not number its header like a Pico, and
+        the mainboard wires three SPI-class peripherals onto two usable SPI
+        hosts, so the pin ownership below is deliberate."""
+        board = load_board_manifest(
+            self.manifest_dir / "picocalc_esp32_s3_pico.toml", self.manifest_dir)
+        validate_board(board, self.drivers)
+        pins = {pin["gpio"]: pin for pin in board["pins"]}
+
+        self.assertEqual(board["target"]["mcu"], "esp32s3")
+        # The module's in-package PSRAM is quad; the board declares only that.
+        self.assertEqual(board["build"]["psram_bytes"], 2 * 1024 * 1024)
+        # The Pico ADC_VREF pad (GPIO10) must never be driven, so it is absent.
+        self.assertNotIn(10, pins)
+        fixed = {
+            "LCD": (35, 36, 37, 38, 39, 40),
+            "microSD": (1, 2, 6, 41, 42),
+            "mainboard PSRAM": (4, 5, 13, 14, 15, 16),
+            "keyboard controller I2C": (17, 18),
+            "audio": (7, 8),
+            "native USB": (19, 20),
+        }
+        for group, gpios in fixed.items():
+            for gpio in gpios:
+                with self.subTest(group=group, gpio=gpio):
+                    self.assertEqual(pins[gpio]["policy"], "fixed")
+        # Only the genuinely spare Pico header pins are free.
+        self.assertEqual({g for g, pin in pins.items() if pin["policy"] == "free"},
+                         {9, 11, 12, 33, 34})
+
+        buses = {bus["name"]: bus for bus in board["buses"]}
+        # The LCD owns SPI2 and the mainboard PSRAM is reserved SPI3: no
+        # runtime SPI host may be offered.
+        self.assertEqual(buses["spi0"]["host"], "SPI2_HOST")
+        self.assertEqual(board["runtime"]["spi_hosts"], [])
+        # The keyboard controller is run at its vendor 10 kHz on a private bus.
+        self.assertEqual(buses["i2c0"]["speed_hz"], 10000)
+        self.assertEqual(buses["i2c0"]["sharing"], "exclusive")
+        self.assertEqual((buses["i2c0"]["sda"], buses["i2c0"]["scl"]), (17, 18))
+
+        devices = {device["name"]: device for device in board["devices"]}
+        self.assertEqual(devices["display0"]["driver"], "st7365p")
+        self.assertEqual(devices["display0"]["bindings"],
+                         {"spi": "spi0", "cs": 38, "dc": 39, "reset": 40})
+        # The SD card uses one-bit SDMMC (DAT1/DAT2 are not wired) so that the
+        # second SPI host stays free for the mainboard PSRAM.
+        self.assertEqual(devices["storage0"]["driver"], "sdmmc")
+        self.assertEqual(devices["storage0"]["bindings"], {"clk": 1, "cmd": 2, "d0": 42})
+
+        header = generate_header(board, self.drivers)
+        # CD/DAT3 is held high so a card stays in SD mode.
+        self.assertIn("{.pin = GPIO_NUM_41, .level = 1}", header)
+
+        # Quad PSRAM only: octal would claim GPIO33-37 and abort the boot.
+        sdkconfig = (ROOT / "sdkconfig.defaults.picocalc_esp32_s3_pico").read_text()
+        self.assertIn("CONFIG_SPIRAM_MODE_QUAD=y", sdkconfig)
+        self.assertIn("# CONFIG_SPIRAM_MODE_OCT is not set", sdkconfig)
+        self.assertNotIn("CONFIG_SPIRAM_MODE_OCT=y", sdkconfig)
+        board_json = json.loads((ROOT / "boards/picocalc_esp32_s3_pico.json").read_text())
+        self.assertEqual(board_json["build"]["psram_type"], "qspi")
+        self.assertEqual(board_json["build"]["arduino"]["memory_type"], "qio_qspi")
+
     def test_cl32_has_one_public_board_config(self) -> None:
         bases = available_base_profiles(self.manifest_dir)
         ids = {board["board"]["id"] for _, board in bases["esp32s3"]}

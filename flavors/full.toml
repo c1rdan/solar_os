@@ -153,6 +153,7 @@ esp32_dac = true
 st7305 = true
 ili9341 = true
 st7796 = true
+st7365p = true
 st7789 = true
 cvbs = true
 vga = true

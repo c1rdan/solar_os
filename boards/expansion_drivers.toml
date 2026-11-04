@@ -1817,6 +1817,50 @@ kind = "parameter"
 hint = "0|1"
 allowed = [0, 1]
 
+[drivers.st7365p]
+summary = "320x320 color TFT (ST7365P/ILI9488-class)"
+package = "driver_display_st7365p"
+targets = ["esp32", "esp32s3"]
+capabilities = ["gfx", "expansion_spi", "expansion_gpio"]
+board_capabilities = ["display", "gfx"]
+board_driver = "display_st7365p"
+board_defines = { SOLAR_OS_BOARD_DISPLAY_CONTROLLER = '"ST7365P"', SOLAR_OS_BOARD_DISPLAY_WIDTH = "320", SOLAR_OS_BOARD_DISPLAY_HEIGHT = "320" }
+early = true
+default_name = "display0"
+[[drivers.st7365p.bindings]]
+key = "spi"
+kind = "spi_bus"
+hint = "bus"
+required = true
+[[drivers.st7365p.bindings]]
+key = "cs"
+kind = "spi_cs"
+hint = "gpio"
+required = true
+[[drivers.st7365p.bindings]]
+key = "dc"
+kind = "gpio"
+hint = "gpio"
+required = true
+[[drivers.st7365p.bindings]]
+key = "reset"
+kind = "gpio"
+hint = "gpio"
+[[drivers.st7365p.bindings]]
+key = "bl"
+kind = "gpio"
+hint = "gpio"
+[[drivers.st7365p.bindings]]
+key = "active"
+kind = "parameter"
+hint = "0|1"
+allowed = [0, 1]
+[[drivers.st7365p.bindings]]
+key = "pwm"
+kind = "parameter"
+hint = "0|1"
+allowed = [0, 1]
+
 [drivers.st7789]
 summary = "320x240 color TFT"
 package = "driver_display_st7789"

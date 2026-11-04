@@ -28,6 +28,8 @@ typedef struct {
     uint8_t madctl;
     bool st7796;
     bool st7789;
+    /* ST7365P / ILI9488-class 320x320 panel used by the Clockwork PicoCalc. */
+    bool st7365p;
     bool invert_color;
     int power_pin;
     bool power_active_high;

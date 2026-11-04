@@ -240,7 +240,8 @@ static esp_err_t attach_tft(const char *name,
                             const solar_os_expansion_binding_t *bindings,
                             size_t binding_count,
                             bool st7796,
-                            bool st7789)
+                            bool st7789,
+                            bool st7365p)
 {
     char spi_bus[SOLAR_OS_EXPANSION_TARGET_MAX];
     int cs = -1;
@@ -282,18 +283,19 @@ static esp_err_t attach_tft(const char *name,
         .width = SOLAR_OS_BOARD_DISPLAY_NATIVE_WIDTH,
         .height = SOLAR_OS_BOARD_DISPLAY_NATIVE_HEIGHT,
 #else
-        .width = (st7796 || st7789) ? 320 : 240,
-        .height = (st7796 || st7789) ? 480 : 320,
+        .width = st7365p ? 320 : ((st7796 || st7789) ? 320 : 240),
+        .height = st7365p ? 320 : ((st7796 || st7789) ? 480 : 320),
 #endif
 #ifdef SOLAR_OS_BOARD_DISPLAY_MADCTL
         .madctl = SOLAR_OS_BOARD_DISPLAY_MADCTL,
 #else
-        .madctl = (st7796 || st7789) ? 0x60 : 0x88,
+        .madctl = st7365p ? 0x40 : ((st7796 || st7789) ? 0x60 : 0x88),
 #endif
         .col_offset = SOLAR_OS_BOARD_DISPLAY_COL_OFFSET,
         .row_offset = SOLAR_OS_BOARD_DISPLAY_ROW_OFFSET,
         .st7796 = st7796,
         .st7789 = st7789,
+        .st7365p = st7365p,
 #ifdef SOLAR_OS_BOARD_DISPLAY_INVERT_COLOR
         .invert_color = SOLAR_OS_BOARD_DISPLAY_INVERT_COLOR != 0,
 #else
@@ -322,16 +324,22 @@ static esp_err_t attach_tft(const char *name,
     device->display = (solar_os_board_display_t) {
         .ops = &display_ops,
         .driver = &device->driver,
-        .driver_name = st7796 ? "st7796" : (st7789 ? "st7789" : "ili9341"),
+        .driver_name = st7365p ? "st7365p" :
+            (st7796 ? "st7796" : (st7789 ? "st7789" : "ili9341")),
         .u8g2 = u8g2,
-        .controller = st7796 ? "ST7796" : (st7789 ? "ST7789" : "ILI9341"),
+        .controller = st7365p ? "ST7365P" :
+            (st7796 ? "ST7796" : (st7789 ? "ST7789" : "ILI9341")),
         .width = u8g2_GetDisplayWidth(u8g2),
         .height = u8g2_GetDisplayHeight(u8g2),
         .surface_formats = SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT,
         .frame_formats = SOLAR_OS_DISPLAY_FORMAT_INDEX2_BIT |
             SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT | SOLAR_OS_DISPLAY_FORMAT_RGB565_BIT,
-        .preferred_stream_fps = st7796 ? 25 : 30,
-        .max_stream_pixels_per_second = 1600000U,
+        /* The 320x320 panel moves 16 bits per pixel over a slower SPI clock,
+         * so budget streams from the clock instead of the fixed TFT figure:
+         * about one pixel per 20 clocks leaves room for command overhead. */
+        .preferred_stream_fps = st7365p ? 15 : (st7796 ? 25 : 30),
+        .max_stream_pixels_per_second = st7365p ?
+            (uint32_t)(SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ / 20U) : 1600000U,
         .ready = true,
     };
     device->primary = solar_os_display_target_is_board_primary(name);
@@ -352,21 +360,28 @@ static esp_err_t attach_ili9341(const char *name,
                                 const solar_os_expansion_binding_t *bindings,
                                 size_t binding_count)
 {
-    return attach_tft(name, bindings, binding_count, false, false);
+    return attach_tft(name, bindings, binding_count, false, false, false);
 }
 
 static esp_err_t attach_st7796(const char *name,
                                const solar_os_expansion_binding_t *bindings,
                                size_t binding_count)
 {
-    return attach_tft(name, bindings, binding_count, true, false);
+    return attach_tft(name, bindings, binding_count, true, false, false);
 }
 
 static esp_err_t attach_st7789(const char *name,
                                const solar_os_expansion_binding_t *bindings,
                                size_t binding_count)
 {
-    return attach_tft(name, bindings, binding_count, false, true);
+    return attach_tft(name, bindings, binding_count, false, true, false);
+}
+
+static esp_err_t attach_st7365p(const char *name,
+                                const solar_os_expansion_binding_t *bindings,
+                                size_t binding_count)
+{
+    return attach_tft(name, bindings, binding_count, false, false, true);
 }
 
 static esp_err_t detach(const char *name)
@@ -436,5 +451,17 @@ const solar_os_expansion_driver_t solar_os_st7789_expansion_driver = {
     .binding_specs = binding_specs,
     .binding_spec_count = sizeof(binding_specs) / sizeof(binding_specs[0]),
     .attach = attach_st7789,
+    .detach = detach,
+};
+
+const solar_os_expansion_driver_t solar_os_st7365p_expansion_driver = {
+    .name = "st7365p",
+    .category = SOLAR_OS_EXPANSION_CATEGORY_DISPLAY,
+    .summary = "320x320 color TFT (ST7365P/ILI9488-class)",
+    .required_capabilities = TFT_CAPABILITIES,
+    .early = true,
+    .binding_specs = binding_specs,
+    .binding_spec_count = sizeof(binding_specs) / sizeof(binding_specs[0]),
+    .attach = attach_st7365p,
     .detach = detach,
 };

@@ -1655,9 +1655,13 @@ the ESP32-S3 JTAG pads and are used here as ordinary GPIO.
 
 Current state (staged bring-up):
 
-- Display: the 320x320 panel is driven through the ST7796 initialisation as a
-  stepping stone and runs at 20 MHz. Its backlight is controlled by the
-  keyboard MCU, not by a GPIO, so it keeps the MCU's default brightness.
+- Display: the 320x320 ST7365P/ILI9488-class panel uses the `st7365p` driver
+  with the vendor's initialisation sequence, streams RGB565, and runs at
+  20 MHz (the datasheet write cycle is about 15 MHz, and other ESP32-S3 ports
+  run this panel at 40 MHz; raise `SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ` to try
+  it). If red and blue are swapped, set `SOLAR_OS_BOARD_DISPLAY_MADCTL` to
+  `0x48`. Its backlight is controlled by the keyboard MCU, not by a GPIO, so it
+  keeps the MCU's default brightness until the MCU driver is attached.
 - Storage: the microSD slot (`storage0`) is used in one-bit SDMMC mode on
   CLK1/CMD2/DAT0=42. DAT1 and DAT2 are not wired on the mainboard, so one bit is
   the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card
