@@ -189,7 +189,7 @@ notes = "GNSS starts powered off; use `gnss power on`. The default profile uses 
 [devices.picocalc_esp32_s3_pico]
 display = "320×320 ST7365P/ILI9488-class SPI LCD."
 keyboard = "Built-in QWERTY keyboard with a four-way pad and a backlight, read through the mainboard controller."
-sound = "None attached yet."
+sound = "Stereo PWM audio through the mainboard speakers and headphone jack."
 storage = "microSD over one-bit SDMMC with card-detect hot-plug."
 connectivity = "Wi-Fi, BLE, and native USB CDC through the module's USB-C port."
 power = "Battery percentage and charging state through the mainboard controller; orderly power-off."

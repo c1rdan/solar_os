@@ -1696,7 +1696,14 @@ Current state (staged bring-up):
   and removing it unmounts the volume, after about three quarters of a second
   of stable state. Remove a card only when nothing is writing to it, because a
   card pulled mid-write can lose data.
-- No audio or LED driver is attached yet.
+- Audio: `audio0` plays 16-bit PCM in stereo through two LEDC PWM outputs
+  (left GPIO7, right GPIO8) at 16 kHz with 8-bit resolution on a 78 kHz
+  carrier; the mainboard's RC filter and amplifier turn them into line level.
+  Mono sources play on both channels. The amplifier enable and the
+  headphone-jack detection that mutes the speaker belong to the keyboard
+  controller and are not reachable from here, so there is no software mute and
+  the speaker cannot be told apart from headphones.
+- No LED driver is attached yet.
 
 ```sh
 pio run -e picocalc_esp32_s3_pico

@@ -12,6 +12,9 @@
 typedef struct {
     bool attached;
     int pin;
+    /* Right channel pin of a stereo pair, or -1 for mono. */
+    int pin_right;
+    solar_os_stream_audio_format_t native_format;
     uint8_t volume;
     char id[SOLAR_OS_AUDIO_DEVICE_ID_MAX];
     char stream_id[SOLAR_OS_STREAM_ID_MAX];
@@ -19,13 +22,16 @@ typedef struct {
 
 static solar_os_audio_pwm_device_t pwm_audio;
 
-static const solar_os_stream_audio_format_t pwm_audio_native_format = {
-    .sample_format = SOLAR_OS_STREAM_AUDIO_S16_LE,
-    .sample_rate = AUDIO_PWM_SAMPLE_RATE,
-    .channels = 1U,
-    .bits_per_sample = 16U,
-    .frames_per_block = AUDIO_PWM_FRAMES_PER_BLOCK,
-};
+static solar_os_stream_audio_format_t pwm_audio_native_format_for(bool stereo)
+{
+    return (solar_os_stream_audio_format_t) {
+        .sample_format = SOLAR_OS_STREAM_AUDIO_S16_LE,
+        .sample_rate = AUDIO_PWM_SAMPLE_RATE,
+        .channels = stereo ? 2U : 1U,
+        .bits_per_sample = 16U,
+        .frames_per_block = AUDIO_PWM_FRAMES_PER_BLOCK,
+    };
+}
 
 static bool audio_pwm_requested_format_supported(
     const solar_os_stream_audio_format_t *format)
@@ -56,7 +62,7 @@ static esp_err_t audio_pwm_stream_open(
             ESP_ERR_NOT_SUPPORTED : ESP_ERR_INVALID_STATE;
     }
 
-    solar_os_stream_audio_format_t format = pwm_audio_native_format;
+    solar_os_stream_audio_format_t format = device->native_format;
     if (options != NULL) {
         if (options->requested_audio.sample_rate != 0U) {
             format.sample_rate = options->requested_audio.sample_rate;
@@ -65,7 +71,9 @@ static esp_err_t audio_pwm_stream_open(
             format.channels = options->requested_audio.channels;
         }
     }
-    const esp_err_t err = audio_pwm_open((gpio_num_t)device->pin);
+    const esp_err_t err = device->pin_right >= 0 ?
+        audio_pwm_open_stereo((gpio_num_t)device->pin, (gpio_num_t)device->pin_right) :
+        audio_pwm_open((gpio_num_t)device->pin);
     if (err == ESP_OK) {
         handle->context = device;
         handle->audio = format;
@@ -124,7 +132,7 @@ static esp_err_t audio_pwm_register_stream(solar_os_audio_pwm_device_t *device)
             .type = SOLAR_OS_STREAM_TYPE_AUDIO,
             .direction = SOLAR_OS_STREAM_DIRECTION_SINK,
             .sharing = SOLAR_OS_STREAM_SHARING_EXCLUSIVE,
-            .audio = pwm_audio_native_format,
+            .audio = device->native_format,
         },
         .open = audio_pwm_stream_open,
         .close = audio_pwm_stream_close,
@@ -137,7 +145,8 @@ static esp_err_t audio_pwm_register_stream(solar_os_audio_pwm_device_t *device)
     strlcpy(driver.info.unit, "frames", sizeof(driver.info.unit));
     strlcpy(driver.info.format, "pcm-s16le", sizeof(driver.info.format));
     strlcpy(driver.info.summary,
-            "LEDC PWM audio playback",
+            device->pin_right >= 0 ? "LEDC PWM stereo audio playback" :
+                                     "LEDC PWM audio playback",
             sizeof(driver.info.summary));
     return solar_os_stream_register(&driver);
 }
@@ -154,19 +163,25 @@ esp_err_t solar_os_audio_pwm_attach(
     }
 
     int pin = -1;
+    int pin_right = -1;
     for (size_t i = 0; i < binding_count; i++) {
-        if (bindings[i].kind == SOLAR_OS_EXPANSION_BINDING_PWM &&
-            strcmp(bindings[i].role, "pwm") == 0) {
+        if (bindings[i].kind != SOLAR_OS_EXPANSION_BINDING_PWM) {
+            continue;
+        }
+        if (strcmp(bindings[i].role, "pwm") == 0 && pin < 0) {
             pin = bindings[i].value;
-            break;
+        } else if (strcmp(bindings[i].role, "pwm_right") == 0 && pin_right < 0) {
+            pin_right = bindings[i].value;
         }
     }
-    if (pin < 0) {
+    if (pin < 0 || (pin_right >= 0 && pin_right == pin)) {
         return ESP_ERR_INVALID_ARG;
     }
 
     memset(&pwm_audio, 0, sizeof(pwm_audio));
     pwm_audio.pin = pin;
+    pwm_audio.pin_right = pin_right;
+    pwm_audio.native_format = pwm_audio_native_format_for(pin_right >= 0);
     pwm_audio.volume = 70U;
     strlcpy(pwm_audio.id, name, sizeof(pwm_audio.id));
     const int stream_len = snprintf(pwm_audio.stream_id,
@@ -188,10 +203,14 @@ esp_err_t solar_os_audio_pwm_attach(
     solar_os_audio_device_info_t info = {
         .capabilities = SOLAR_OS_AUDIO_DEVICE_CAP_OUTPUT |
                         SOLAR_OS_AUDIO_DEVICE_CAP_VOLUME,
-        .native_format = pwm_audio_native_format,
+        .native_format = pwm_audio.native_format,
     };
     strlcpy(info.id, pwm_audio.id, sizeof(info.id));
-    snprintf(info.name, sizeof(info.name), "LEDC PWM on GPIO%d", pin);
+    if (pin_right >= 0) {
+        snprintf(info.name, sizeof(info.name), "LEDC PWM GPIO%d/%d", pin, pin_right);
+    } else {
+        snprintf(info.name, sizeof(info.name), "LEDC PWM on GPIO%d", pin);
+    }
     strlcpy(info.provider, "expansion", sizeof(info.provider));
     strlcpy(info.playback_stream,
             pwm_audio.stream_id,

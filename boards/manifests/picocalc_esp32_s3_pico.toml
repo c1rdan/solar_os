@@ -17,6 +17,7 @@ drivers = [
   "display_st7365p",
   "storage_expansion",
   "battery_expansion",
+  "audio_expansion",
   "i2c_esp_idf",
   "spi_esp_idf",
   "gpio_esp_idf",
@@ -26,7 +27,7 @@ drivers = [
 capabilities = [
   "streaming_display",
   "psram", "simd", "display", "gfx", "display_brightness",
-  "cdc", "uart", "sd", "i2c", "spi", "battery",
+  "cdc", "uart", "sd", "i2c", "spi", "battery", "audio",
   "wifi", "ble", "gpio", "adc", "pwm", "key",
   "expansion_gpio", "expansion_i2c", "expansion_spi", "expansion_uart",
   "expansion_adc", "expansion_pwm",
@@ -134,6 +135,14 @@ bindings = { spi = "spi0", cs = 38, dc = 39, reset = 40 }
 driver = "picocalc-core"
 name = "core0"
 bindings = { i2c = "i2c0", addr = 0x1f }
+
+# Two PWM outputs (left GP26, right GP27) through an RC filter into the
+# mainboard's amplifier. The amplifier enable and the headphone-jack mute belong
+# to the keyboard controller, so the speaker cannot be muted from here.
+[[devices]]
+driver = "audio-pwm"
+name = "audio0"
+bindings = { pwm = 7, pwm_right = 8 }
 
 # TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard. The
 # slot's card-detect switch (Pico GP22) pulls the line low when a card is

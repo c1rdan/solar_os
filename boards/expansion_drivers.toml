@@ -2281,7 +2281,7 @@ min = 1
 max = 256
 
 [drivers.audio-pwm]
-summary = "PWM mono audio"
+summary = "PWM audio (mono, or stereo with pwm_right)"
 package = "expansion_audio_pwm"
 targets = ["esp32", "esp32s3"]
 capabilities = ["expansion_pwm"]
@@ -2293,6 +2293,10 @@ key = "pwm"
 kind = "pwm"
 hint = "gpio"
 required = true
+[[drivers.audio-pwm.bindings]]
+key = "pwm_right"
+kind = "pwm"
+hint = "gpio"
 
 [drivers.pcm5102]
 summary = "I2S stereo audio"

@@ -580,6 +580,9 @@ class BoardManifestTest(unittest.TestCase):
         self.assertEqual(devices["storage0"]["bindings"],
                          {"clk": 1, "cmd": 2, "d0": 42, "cd": 6})
 
+        # Stereo PWM audio on the two mainboard speaker pins.
+        self.assertEqual(devices["audio0"]["driver"], "audio-pwm")
+        self.assertEqual(devices["audio0"]["bindings"], {"pwm": 7, "pwm_right": 8})
 
         header = generate_header(board, self.drivers)
         # CD/DAT3 is held high so a card stays in SD mode.

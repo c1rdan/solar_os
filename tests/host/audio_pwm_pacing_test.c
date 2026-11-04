@@ -14,8 +14,8 @@ typedef unsigned TickType_t;
 #define AUDIO_PWM_WRITE_CHUNK 256U
 #define pdMS_TO_TICKS(ms) ((ms) * TICK_HZ / 1000U)
 
-static struct { bool active; void *samples; } audio_pwm;
-static uint8_t queue[512], played[8192];
+static struct { bool active; bool stereo; void *samples; } audio_pwm;
+static uint8_t queue[512], played[16384];
 static unsigned produced, consumed, delays;
 static bool fail_send;
 
@@ -48,7 +48,8 @@ static void vTaskDelay(TickType_t ticks)
 {
     assert(ticks > 0U);
     ++delays;
-    drain(ticks * AUDIO_PWM_SAMPLE_RATE / TICK_HZ);
+    /* The sample interrupt takes one frame per period: two bytes in stereo. */
+    drain(ticks * AUDIO_PWM_SAMPLE_RATE / TICK_HZ * (audio_pwm.stereo ? 2U : 1U));
 }
 
 #include "audio_pwm_write.inc"
@@ -60,6 +61,8 @@ int main(void)
         pcm[i] = (int16_t)(i * 4937U);
     audio_pwm.active = true;
     audio_pwm.samples = queue;
+    /* A mono device mixes stereo input down to one byte per frame. */
+    audio_pwm.stereo = false;
     for (unsigned channels = 1; channels <= 2; channels++) {
         for (unsigned volume = 0; volume <= 100; volume += 25) {
             produced = consumed = delays = 0;
@@ -73,6 +76,38 @@ int main(void)
             }
         }
     }
+    /* A stereo device queues a left then a right byte per frame. Stereo input
+     * keeps its channels apart; mono input plays on both. */
+    audio_pwm.stereo = true;
+    for (unsigned channels = 1; channels <= 2; channels++) {
+        for (unsigned volume = 0; volume <= 100; volume += 25) {
+            produced = consumed = delays = 0;
+            assert(audio_pwm_write_s16(pcm, 8192, channels, volume) == ESP_OK);
+            drain(produced - consumed);
+            assert(consumed == 8192 * 2 && delays < 8192 / 64);
+            for (unsigned i = 0; i < 8192; i++) {
+                const int32_t left = pcm[i * channels];
+                const int32_t right = channels == 2 ? pcm[i * channels + 1] : left;
+                assert(played[i * 2] == (uint8_t)((left * (int)volume / 100 + 32768) >> 8));
+                assert(played[i * 2 + 1] == (uint8_t)((right * (int)volume / 100 + 32768) >> 8));
+            }
+        }
+    }
+    /* Independent channels really are independent. */
+    {
+        static int16_t split[64];
+        for (unsigned i = 0; i < 32; i++) {
+            split[i * 2] = 20000;
+            split[i * 2 + 1] = -20000;
+        }
+        produced = consumed = delays = 0;
+        assert(audio_pwm_write_s16(split, 32, 2, 100) == ESP_OK);
+        drain(produced - consumed);
+        for (unsigned i = 0; i < 32; i++) {
+            assert(played[i * 2] > 128 && played[i * 2 + 1] < 128);
+        }
+    }
+    audio_pwm.stereo = false;
     produced = consumed = delays = 0;
     fail_send = true;
     assert(audio_pwm_write_s16(pcm, 1, 1, 100) == ESP_ERR_INVALID_SIZE);
