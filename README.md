@@ -108,6 +108,7 @@ pio run -e qdtech_es3c28p
 pio run -e qdtech_es3n28p
 pio run -e cl_32
 pio run -e t_lora_pager
+pio run -e picocalc_esp32_s3_pico
 pio run -e t_deck_plus
 pio run -e thinknode_m9
 pio run -e waveshare_esp32_s3_sim7670g_4g

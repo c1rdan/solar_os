@@ -41,6 +41,7 @@ The current tree includes these board targets:
 | `t_lora_pager` | `t_lora_pager` | LilyGO T-LoRa-Pager (SX1262) | ESP32-S3-WROOM-1-N16R8 target with a 480x222 ST7796 display, a TCA8418 4x10 matrix keyboard, an SX1262 LoRa radio, PCF85063 RTC, microSD over SDSPI, ES8311 audio, a BQ27220 battery gauge, a BQ25896 charger, a rotary encoder, an XL9555 I2C GPIO controller for integrated power rails, a MIA-M10Q GNSS receiver, an ST25R3916 NFC-A reader, a BHI260AP IMU, a DRV2605 haptic controller, native USB CDC, Wi-Fi, BLE, and expansion I2C/SPI/UART/GPIO/ADC/PWM. SD power and its external pull-up start enabled; GNSS and NFC power start disabled and are enabled with `gnss power on` and `nfc power on`. Use `haptic play EFFECT` for DRV2605 ROM effects 1 through 117. The Pager fixes BQ25896 fast-charge current at 704 mA during attachment; inspect or explicitly change charger settings with `charger`. |
 | `thinknode_m9` | `thinknode_m9` | [Elecrow ThinkNode M9](https://www.elecrow.com/wiki/ThinkNode_M9_Meshtastic_Communication_Terminal_with_Full_Keyboard.html) | ESP32-S3R8 target with 16 MB flash, 8 MB PSRAM, a 320x240 ST7789 display, a 37-key STC8H-scanned QWERTY keypad with backlight, microSD over SDSPI, PCF8563 RTC, ATGM336H or BM72A GNSS over NMEA, battery ADC, passive buzzer, CH340C-class (CH340K) USB/UART console, Wi-Fi, and BLE. The keypad I2C address identifies the board revision (0x6c is v1.0, 0x6d is v1.1). The GNSS enable rail is active-low on v1.0, which the manifest declares; a v1.1 board, active-high, sets `active = 1` on `gnss0`. GNSS power starts disabled and is enabled with `gnss power on`. The keypad's Home key exits the foreground app, Back is escape, Messages/Maps/Pin are F1/F2/F3, long-press Pin is F4, and the Message key arms the one-shot compose layer that supplies tab, pipe, backslash, brackets, and the other characters the keypad cannot type directly. Composed up and down page through the scrollback and composed right is tab (see the `stc8h-keyboard` driver reference). The onboard LR1110 LoRa radio is driven by the `lr11xx` driver as `radio0` on the shared SPI bus, declared at 915 MHz with a 3.3 V TCXO and the board's own DIO5/DIO6 antenna-switch table; an 868 MHz unit changes the `freq` binding. It has exchanged LoRa packets with an RNode on the bench; 2.4 GHz, GNSS scanning, and Wi-Fi scanning are out of scope (the board has a separate ATGM336H GNSS receiver). |
 | `t_deck_plus` | `t_deck_plus` | LilyGO T-Deck Plus | ESP32-S3FN16R8 target with a 320x240 ST7789 display, GT911 touch, I2C keyboard, five-way trackball, separate I2S speaker output and ES7210 microphone capture, SX1262 LoRa radio, microSD over SDSPI, battery ADC, internal GPS UART, native USB CDC, Wi-Fi, and BLE. |
+| `picocalc_esp32_s3_pico` | `picocalc_esp32_s3_pico` | [Clockwork PicoCalc](https://github.com/clockworkpi/PicoCalc) with a [Waveshare ESP32-S3-Pico](https://www.waveshare.com/esp32-s3-pico.htm) in place of the Raspberry Pi Pico | ESP32-S3R2 module with 16 MB flash and 2 MB quad PSRAM driving the PicoCalc mainboard: a 320x320 SPI LCD, microSD over one-bit SDMMC, native USB CDC through the module's USB-C port, UART, Wi-Fi, BLE, and expansion UART/GPIO/ADC/PWM on the free Pico header pins. Hardware support is being added in stages; see [Clockwork PicoCalc](#clockwork-picocalc). |
 | `waveshare_esp32_s3_sim7670g_4g` | `waveshare_esp32_s3_sim7670g_4g` | [Waveshare ESP32-S3-SIM7670G-4G V2.0](https://www.waveshare.com/esp32-s3-sim7670g-4g.htm) | Headless ESP32-S3R8 target with 16 MB flash, 8 MB PSRAM, CH343/UART console, SIM7670G AT, GNSS, and IPv4 PPP access over UART1, MAX17048 battery gauge, one-bit SDMMC, one WS2812B, Wi-Fi, BLE, and expansion GPIO/ADC/PWM/SPI/I2S. Set the DIP switches to CAM OFF, HUB ON, 4G OFF, USB OFF. With CAM off, the unused camera signal pins are available as expansion GPIOs and can form runtime SPI or I2S buses; GPIO15/GPIO16 remain the shared MAX17048 I2C bus and GPIO46 remains blocked as an input-only strapping pin. SolarOS drives GPIO21 active-high to control the modem VBAT rail; leave the 4G switch OFF to avoid contention and permit software power-off/reset. The modem UART belongs exclusively to PPP while connected; disconnect it before AT or GNSS use. Camera support is not included. |
 | `waveshare_esp32_s3_sim7670g_4g_epaper` | `waveshare_esp32_s3_sim7670g_4g` with `SOLAR_OS_BOARD=waveshare_esp32_s3_sim7670g_4g_epaper` | Waveshare ESP32-S3-SIM7670G-4G E-paper workbench | Expansion-export reference target with a fixed M5Stack TAB5 keyboard on the board-owned I2C bus at address `0x6d`, INT on GPIO41, and a fixed primary 400x300 SSD1683 display on SPI2 using GPIO3/GPIO7 through GPIO12. GPIO40 remains available for expansion. |
 
@@ -1613,6 +1614,59 @@ and its [controller-identification implementation](https://github.com/Free-Ink/f
 
 ```sh
 pio run -e xteink_x4_pro
+```
+
+## Clockwork PicoCalc
+
+The `picocalc_esp32_s3_pico` target runs SolarOS on a [Clockwork PicoCalc](https://github.com/clockworkpi/PicoCalc)
+whose Raspberry Pi Pico has been replaced by a
+[Waveshare ESP32-S3-Pico](https://www.waveshare.com/esp32-s3-pico.htm). The
+module is an ESP32-S3R2 with 16 MB flash and 2 MB of in-package **quad** PSRAM,
+so the target builds with `CONFIG_SPIRAM_MODE_QUAD`. An octal configuration
+would claim GPIO33-37, which carry the LCD signals, and a PSRAM mode mismatch
+aborts the boot. The PicoCalc mainboard also carries an 8 MB SPI PSRAM; it is
+not memory mapped on an ESP32-S3 and is not counted in `psram_bytes`.
+
+Flash and use the console through the **Waveshare module's own USB-C port**.
+The PicoCalc's USB-C port cannot put the ESP32-S3 into its bootloader, and the
+mainboard (keyboard, battery and backlight controller) only runs while the
+PicoCalc itself is powered, so connect the PicoCalc's battery or USB-C supply
+as well. To enter the bootloader, hold BOOT (GPIO0), tap RESET, and release BOOT.
+
+The Waveshare module does not number its header like a Pico. The mainboard
+signals reach the module through this mapping:
+
+| PicoCalc signal | Pico pin | ESP32-S3 GPIO |
+| --- | --- | --- |
+| LCD SCK, MOSI, MISO, CS | GP10, GP11, GP12, GP13 | 35, 36, 37, 38 |
+| LCD D/C, reset | GP14, GP15 | 39, 40 |
+| Keyboard/power MCU I2C SDA, SCL | GP6, GP7 | 17, 18 |
+| microSD CLK, CMD, DAT0, CD/DAT3 | GP18, GP19, GP16, GP17 | 1, 2, 42, 41 |
+| microSD card detect | GP22 | 6 |
+| Audio left, right (PWM) | GP26, GP27 | 7, 8 |
+| Mainboard PSRAM CE, SCLK | GP20, GP21 | 4, 5 |
+| Mainboard PSRAM SIO0 to SIO3 | GP2 to GP5 | 13, 14, 15, 16 |
+| PicoCalc debug UART0 TX, RX | GP0, GP1 | 11, 12 |
+| UART1 to the keyboard MCU | GP8, GP9 | 33, 34 |
+| Free header GPIO / ADC | GP28 | 9 |
+
+The Pico `ADC_VREF` pad is GPIO10 on this module; never drive it. GPIO39-42 are
+the ESP32-S3 JTAG pads and are used here as ordinary GPIO.
+
+Current state (staged bring-up):
+
+- Display: the 320x320 panel is driven through the ST7796 initialisation as a
+  stepping stone and runs at 20 MHz. Its backlight is controlled by the
+  keyboard MCU, not by a GPIO, so it keeps the MCU's default brightness.
+- Storage: the microSD slot (`storage0`) is used in one-bit SDMMC mode on
+  CLK1/CMD2/DAT0=42. DAT1 and DAT2 are not wired on the mainboard, so one bit is
+  the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card
+  stays in SD mode. The mainboard has no pull-ups on these lines, so the
+  module's internal pull-ups are used; if a card is unreliable, try another card.
+- No keyboard, battery, audio or LED driver is attached yet.
+
+```sh
+pio run -e picocalc_esp32_s3_pico
 ```
 
 ## Headless Boards

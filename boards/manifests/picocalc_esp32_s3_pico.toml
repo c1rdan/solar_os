@@ -1,0 +1,279 @@
+schema = 1
+
+[board]
+id = "picocalc_esp32_s3_pico"
+name = "Clockwork PicoCalc (ESP32-S3-Pico)"
+vendor = "Clockwork"
+module = "Waveshare ESP32-S3-Pico (ESP32-S3R2: 16 MB flash, 2 MB quad PSRAM)"
+
+[target]
+mcu = "esp32s3"
+platformio_board = "picocalc_esp32_s3_pico"
+
+[build]
+drivers = [
+  "cdc_usb_serial_jtag",
+  "uart_esp_idf",
+  "display_st7796",
+  "storage_expansion",
+  "i2c_esp_idf",
+  "spi_esp_idf",
+  "gpio_esp_idf",
+  "adc_esp_idf",
+  "pwm_esp_idf",
+]
+capabilities = [
+  "streaming_display",
+  "psram", "simd", "display", "gfx",
+  "cdc", "uart", "sd", "i2c", "spi",
+  "wifi", "ble", "gpio", "adc", "pwm", "key",
+  "expansion_gpio", "expansion_i2c", "expansion_spi", "expansion_uart",
+  "expansion_adc", "expansion_pwm",
+]
+required_packages = []
+# The module's in-package quad PSRAM. The 8 MB chip on the PicoCalc mainboard
+# is not memory mapped and is not counted here.
+psram_bytes = 2097152
+
+[defines]
+# GPIO41 is the TF slot's CD/DAT3 line. A card sees it low during CMD0 as a
+# request for SPI mode, so hold it high before the SD driver starts: the card
+# is used in 1-bit SDMMC mode.
+SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}}'
+# Interim controller selection: the PicoCalc panel (ST7365P/ILI9488-class,
+# 320x320) is driven through the ST7796 initialisation until its own driver
+# lands. Colour order and window are tuned on hardware.
+SOLAR_OS_BOARD_DISPLAY_CONTROLLER = '"ST7796"'
+SOLAR_OS_BOARD_DISPLAY_CONTROLLER_ST7796 = "1"
+SOLAR_OS_BOARD_DISPLAY_DRIVER_NAME = '"st7796"'
+SOLAR_OS_BOARD_DISPLAY_WIDTH = "320"
+SOLAR_OS_BOARD_DISPLAY_HEIGHT = "320"
+SOLAR_OS_BOARD_DISPLAY_NATIVE_WIDTH = "320"
+SOLAR_OS_BOARD_DISPLAY_NATIVE_HEIGHT = "320"
+# The datasheet write cycle is 66 ns (about 15 MHz); 20 MHz is a conservative
+# start and community ESP32-S3 ports run this panel at 40 MHz.
+SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ = "20000000"
+# MX only (RGB order). SolarOS packs red first, so the BGR bit stays clear; set
+# 0x48 if red and blue come out swapped.
+SOLAR_OS_BOARD_DISPLAY_MADCTL = "0x40"
+SOLAR_OS_BOARD_DISPLAY_INVERT_COLOR = "1"
+SOLAR_OS_BOARD_DISPLAY_U8G2_ROTATION = "U8G2_R0"
+SOLAR_OS_BOARD_PIN_LCD_CS = "GPIO_NUM_38"
+SOLAR_OS_BOARD_PIN_LCD_DC = "GPIO_NUM_39"
+SOLAR_OS_BOARD_PIN_LCD_RST = "GPIO_NUM_40"
+SOLAR_OS_BOARD_PIN_LCD_SCK = "GPIO_NUM_35"
+SOLAR_OS_BOARD_PIN_LCD_MOSI = "GPIO_NUM_36"
+SOLAR_OS_BOARD_SPI_HOST = "SPI2_HOST"
+SOLAR_OS_BOARD_SPI_NAME = '"FSPI"'
+SOLAR_OS_BOARD_PIN_SPI_SCLK = "GPIO_NUM_35"
+SOLAR_OS_BOARD_PIN_SPI_MISO = "GPIO_NUM_37"
+SOLAR_OS_BOARD_PIN_SPI_MOSI = "GPIO_NUM_36"
+SOLAR_OS_BOARD_SPI_MAX_TRANSFER_SZ = "4096"
+# The I2C bus belongs to the keyboard/power MCU (STM32 at 0x1F), which the
+# PicoCalc firmware drives at 10 kHz.
+SOLAR_OS_BOARD_I2C_PORT = "I2C_NUM_0"
+SOLAR_OS_BOARD_PIN_I2C_SDA = "GPIO_NUM_17"
+SOLAR_OS_BOARD_PIN_I2C_SCL = "GPIO_NUM_18"
+SOLAR_OS_BOARD_PIN_KEY = "GPIO_NUM_0"
+SOLAR_OS_BOARD_KEY_ACTIVE_LEVEL = "0"
+SOLAR_OS_BOARD_KEY_PULL_UP = "1"
+SOLAR_OS_BOARD_KEY_PULL_DOWN = "0"
+SOLAR_OS_BOARD_TERMINAL_DEFAULT_TEXT_SIZE = "SOLAR_OS_TERMINAL_TEXT_SIZE_16"
+# UART0 is wired to the module's CH343 USB bridge. The console itself runs
+# over native USB Serial/JTAG.
+SOLAR_OS_BOARD_UART_PORT = "UART_NUM_0"
+SOLAR_OS_BOARD_PIN_UART_TX = "GPIO_NUM_43"
+SOLAR_OS_BOARD_PIN_UART_RX = "GPIO_NUM_44"
+
+[runtime]
+# Both general-purpose SPI hosts are spoken for: SPI2 drives the LCD and SPI3
+# is reserved for the mainboard PSRAM, so no host is left for runtime buses.
+spi_hosts = []
+uart_ports = ["UART_NUM_1", "UART_NUM_2"]
+
+[[buses]]
+name = "spi0"
+protocol = "spi"
+sharing = "exclusive"
+host = "SPI2_HOST"
+sclk = 35
+miso = 37
+mosi = 36
+cs = [38]
+max_transfer_size = 4096
+
+[[buses]]
+name = "i2c0"
+protocol = "i2c"
+sharing = "exclusive"
+port = "I2C_NUM_0"
+sda = 17
+scl = 18
+speed_hz = 10000
+
+[[buses]]
+name = "uart0"
+protocol = "uart"
+sharing = "exclusive"
+port = "UART_NUM_0"
+tx = 43
+rx = 44
+baud_rate = "SOLAR_OS_BUS_UART_DEFAULT_BAUD_RATE"
+
+[[devices]]
+driver = "st7796"
+name = "display0"
+bindings = { spi = "spi0", cs = 38, dc = 39, reset = 40 }
+
+# TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard.
+[[devices]]
+driver = "sdmmc"
+name = "storage0"
+bindings = { clk = 1, cmd = 2, d0 = 42 }
+
+[[pins]]
+gpio = 0
+policy = "fixed"
+role = "BOOT/download / KEY"
+[[pins]]
+gpio = 1
+policy = "fixed"
+role = "SD CLK (Pico GP18)"
+[[pins]]
+gpio = 2
+policy = "fixed"
+role = "SD CMD (Pico GP19)"
+[[pins]]
+gpio = 4
+policy = "fixed"
+role = "mainboard PSRAM CE (Pico GP20)"
+[[pins]]
+gpio = 5
+policy = "fixed"
+role = "mainboard PSRAM SCLK (Pico GP21)"
+[[pins]]
+gpio = 6
+policy = "fixed"
+role = "SD card detect (Pico GP22)"
+[[pins]]
+gpio = 7
+policy = "fixed"
+role = "audio left PWM (Pico GP26)"
+[[pins]]
+gpio = 8
+policy = "fixed"
+role = "audio right PWM (Pico GP27)"
+[[pins]]
+gpio = 9
+policy = "free"
+role = "header GP28 / ADC"
+expansion = true
+user = true
+adc = true
+pwm = true
+[[pins]]
+gpio = 11
+policy = "free"
+role = "header GP0 / PicoCalc UART0 TX"
+expansion = true
+user = true
+pwm = true
+[[pins]]
+gpio = 12
+policy = "free"
+role = "header GP1 / PicoCalc UART0 RX"
+expansion = true
+user = true
+pwm = true
+[[pins]]
+gpio = 13
+policy = "fixed"
+role = "mainboard PSRAM SIO0 (Pico GP2)"
+[[pins]]
+gpio = 14
+policy = "fixed"
+role = "mainboard PSRAM SIO1 (Pico GP3)"
+[[pins]]
+gpio = 15
+policy = "fixed"
+role = "mainboard PSRAM SIO2 (Pico GP4)"
+[[pins]]
+gpio = 16
+policy = "fixed"
+role = "mainboard PSRAM SIO3 (Pico GP5)"
+[[pins]]
+gpio = 17
+policy = "fixed"
+role = "keyboard/power MCU I2C SDA (Pico GP6)"
+[[pins]]
+gpio = 18
+policy = "fixed"
+role = "keyboard/power MCU I2C SCL (Pico GP7)"
+[[pins]]
+gpio = 19
+policy = "fixed"
+role = "USB D-/CDC"
+[[pins]]
+gpio = 20
+policy = "fixed"
+role = "USB D+/CDC"
+[[pins]]
+gpio = 21
+policy = "fixed"
+role = "module WS2812 RGB LED"
+[[pins]]
+gpio = 33
+policy = "free"
+role = "header GP8 / UART1 TX to keyboard MCU"
+expansion = true
+user = true
+pwm = true
+[[pins]]
+gpio = 34
+policy = "free"
+role = "header GP9 / UART1 RX from keyboard MCU"
+expansion = true
+user = true
+pwm = true
+[[pins]]
+gpio = 35
+policy = "fixed"
+role = "LCD SPI SCK (Pico GP10)"
+[[pins]]
+gpio = 36
+policy = "fixed"
+role = "LCD SPI MOSI (Pico GP11)"
+[[pins]]
+gpio = 37
+policy = "fixed"
+role = "LCD SPI MISO (Pico GP12)"
+[[pins]]
+gpio = 38
+policy = "fixed"
+role = "LCD SPI CS (Pico GP13)"
+[[pins]]
+gpio = 39
+policy = "fixed"
+role = "LCD D/C (Pico GP14)"
+[[pins]]
+gpio = 40
+policy = "fixed"
+role = "LCD reset (Pico GP15)"
+[[pins]]
+gpio = 41
+policy = "fixed"
+role = "SD CD/DAT3 held high (Pico GP17)"
+[[pins]]
+gpio = 42
+policy = "fixed"
+role = "SD DAT0 (Pico GP16)"
+[[pins]]
+gpio = 43
+policy = "releasable"
+role = "UART TX (CH343 bridge)"
+expansion = true
+[[pins]]
+gpio = 44
+policy = "releasable"
+role = "UART RX (CH343 bridge)"
+expansion = true
