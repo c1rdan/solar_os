@@ -16,7 +16,7 @@ KEYMAP_INPUTS := $(wildcard $(ROOT)/keymaps/profiles/*.json) $(ROOT)/scripts/gen
 
 TARGETS += lr11xx_test lr11xx_service_test
 TARGETS += can_twai_test
-TARGETS += picocalc_codec_test board_display_brightness_test card_detect_test
+TARGETS += picocalc_codec_test board_display_brightness_test card_detect_test spi_psram_test
 TARGETS += doc_memory_test
 TARGETS += paged_array_test
 
@@ -1068,6 +1068,10 @@ cl32_keyboard_test: cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyb
 	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
 		cl32_keyboard_test.c $(ROOT)/src/services/solar_os_cl32_keyboard.c -o $@
 
+spi_psram_test: spi_psram_test.c $(ROOT)/src/drivers/spi_psram.c $(ROOT)/src/drivers/spi_psram.h psram_stubs/driver/spi_master.h
+	$(CC) $(CFLAGS) -Wno-unused-parameter -Ipsram_stubs -I. -I$(ROOT)/src -I$(ROOT)/src/services -I$(ROOT)/src/drivers \
+		spi_psram_test.c $(ROOT)/src/drivers/spi_psram.c -o $@
+
 card_detect_test: card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c $(ROOT)/src/services/solar_os_card_detect.h
 	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
 		card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c -o $@
@@ -1379,6 +1383,7 @@ test: $(TARGETS)
 	./picocalc_codec_test
 	./board_display_brightness_test
 	./card_detect_test
+	./spi_psram_test
 	./battery_service_test
 	./batmon_job_test
 	./camera_service_test
