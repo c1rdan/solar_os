@@ -16,7 +16,7 @@ KEYMAP_INPUTS := $(wildcard $(ROOT)/keymaps/profiles/*.json) $(ROOT)/scripts/gen
 
 TARGETS += lr11xx_test lr11xx_service_test
 TARGETS += can_twai_test
-TARGETS += picocalc_codec_test board_display_brightness_test card_detect_test spi_psram_test
+TARGETS += picocalc_codec_test board_display_brightness_test card_detect_test spi_psram_test psram_disk_test
 TARGETS += doc_memory_test
 TARGETS += paged_array_test
 
@@ -1072,6 +1072,10 @@ spi_psram_test: spi_psram_test.c $(ROOT)/src/drivers/spi_psram.c $(ROOT)/src/dri
 	$(CC) $(CFLAGS) -Wno-unused-parameter -Ipsram_stubs -I. -I$(ROOT)/src -I$(ROOT)/src/services -I$(ROOT)/src/drivers \
 		spi_psram_test.c $(ROOT)/src/drivers/spi_psram.c -o $@
 
+psram_disk_test: psram_disk_test.c $(ROOT)/src/services/solar_os_psram_disk.c $(ROOT)/src/services/solar_os_psram_disk_driver.c $(ROOT)/src/services/solar_os_psram_disk.h $(ROOT)/src/drivers/spi_psram.h
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -include compat.h -Ipsram_stubs -I. -I$(ROOT)/include -I$(ROOT)/src -I$(ROOT)/src/services -I$(ROOT)/src/drivers \
+		psram_disk_test.c -o $@
+
 card_detect_test: card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c $(ROOT)/src/services/solar_os_card_detect.h
 	$(CC) $(CFLAGS) -I. -I$(ROOT)/src/services \
 		card_detect_test.c $(ROOT)/src/services/solar_os_card_detect.c -o $@
@@ -1384,6 +1388,7 @@ test: $(TARGETS)
 	./board_display_brightness_test
 	./card_detect_test
 	./spi_psram_test
+	./psram_disk_test
 	./battery_service_test
 	./batmon_job_test
 	./camera_service_test

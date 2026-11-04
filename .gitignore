@@ -114,6 +114,7 @@ tests/host/picocalc_codec_test
 tests/host/board_display_brightness_test
 tests/host/card_detect_test
 tests/host/spi_psram_test
+tests/host/psram_disk_test
 # SC2 host tests (tests/host/Makefile, appended block)
 /tests/host/sc2_*_test
 /tests/host/sc2_vendor_*.o

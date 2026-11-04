@@ -737,6 +737,11 @@ label = "SDMMC card"
 category = "Expansion hardware"
 members = ["expansion_sdmmc"]
 
+[groups.psram_disk]
+label = "SPI PSRAM RAM disk"
+category = "Expansion hardware"
+members = ["expansion_psram_disk"]
+
 [groups.neopixel]
 label = "NeoPixel output"
 category = "Expansion hardware"
@@ -2434,6 +2439,19 @@ sources = [
   "services/solar_os_sdmmc_driver.c",
 ]
 requires = ["esp_driver_gpio", "esp_driver_sdmmc", "fatfs", "heap", "sdmmc"]
+capabilities = ["expansion_gpio"]
+
+[packages.expansion_psram_disk]
+label = "expansion.psram-disk"
+targets = ["esp32s3"]
+expansion_drivers = ["solar_os_psram_disk_expansion_driver"]
+depends = ["service_expansion"]
+sources = [
+  "drivers/spi_psram.c",
+  "services/solar_os_psram_disk.c",
+  "services/solar_os_psram_disk_driver.c",
+]
+requires = ["esp_driver_gpio", "esp_driver_spi", "esp_timer", "fatfs"]
 capabilities = ["expansion_gpio"]
 
 [packages.expansion_neopixel]

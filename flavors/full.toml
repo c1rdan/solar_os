@@ -142,6 +142,7 @@ analog_joystick = true
 ps2_mouse = true
 sdspi = true
 sdmmc = true
+psram_disk = true
 neopixel = true
 audio_pwm = true
 pcm5102 = true

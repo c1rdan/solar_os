@@ -157,6 +157,14 @@ driver = "sdmmc"
 name = "storage0"
 bindings = { clk = 1, cmd = 2, d0 = 42, cd = 6 }
 
+# The 8 MB ESP-PSRAM64H on the mainboard is not memory mapped. It runs in quad
+# mode on SPI3 and is formatted as a RAM disk at /psram on every boot. 32 MHz
+# leaves margin: the whole chip verified error-free at 40 MHz, the limit.
+[[devices]]
+driver = "psram-disk"
+name = "psram0"
+bindings = { sclk = 5, cs = 4, io0 = 13, io1 = 14, io2 = 15, io3 = 16, host = 3, speed = 32 }
+
 [[pins]]
 gpio = 0
 policy = "fixed"

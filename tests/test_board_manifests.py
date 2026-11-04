@@ -579,6 +579,12 @@ class BoardManifestTest(unittest.TestCase):
         # The slot's active-low card-detect switch is bound for hot-plug.
         self.assertEqual(devices["storage0"]["bindings"],
                          {"clk": 1, "cmd": 2, "d0": 42, "cd": 6})
+        # That host carries the mainboard PSRAM's quad lines as a RAM disk, with
+        # clock margin below the 40 MHz GPIO-matrix limit it was verified at.
+        self.assertEqual(devices["psram0"]["driver"], "psram-disk")
+        self.assertEqual(devices["psram0"]["bindings"],
+                         {"sclk": 5, "cs": 4, "io0": 13, "io1": 14, "io2": 15,
+                          "io3": 16, "host": 3, "speed": 32})
 
         # Stereo PWM audio on the two mainboard speaker pins, and the module LED.
         self.assertEqual(devices["audio0"]["driver"], "audio-pwm")
