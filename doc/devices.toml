@@ -193,7 +193,7 @@ sound = "Stereo PWM audio through the mainboard speakers and headphone jack."
 storage = "microSD over one-bit SDMMC with card-detect hot-plug."
 connectivity = "Wi-Fi, BLE, and native USB CDC through the module's USB-C port."
 power = "Battery percentage and charging state through the mainboard controller; orderly power-off."
-sensors = "None."
+sensors = "Module WS2812 RGB LED."
 expansion = "UART, GPIO, ADC, and PWM on the free Pico header pins."
 notes = "ESP32-S3R2 module (16 MB flash, 2 MB quad PSRAM) replacing the Pico in a Clockwork PicoCalc. Flash and use the console through the module's own USB-C port."
 

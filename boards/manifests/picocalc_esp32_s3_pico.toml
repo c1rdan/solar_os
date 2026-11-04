@@ -144,6 +144,12 @@ driver = "audio-pwm"
 name = "audio0"
 bindings = { pwm = 7, pwm_right = 8 }
 
+# The module's own WS2812 RGB LED.
+[[devices]]
+driver = "neopixel"
+name = "pixels0"
+bindings = { data = 21, count = 1 }
+
 # TF slot in 1-bit SDMMC mode. DAT1/DAT2 are not wired on the mainboard. The
 # slot's card-detect switch (Pico GP22) pulls the line low when a card is
 # seated, which is the driver's default polarity.

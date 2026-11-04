@@ -580,9 +580,16 @@ class BoardManifestTest(unittest.TestCase):
         self.assertEqual(devices["storage0"]["bindings"],
                          {"clk": 1, "cmd": 2, "d0": 42, "cd": 6})
 
-        # Stereo PWM audio on the two mainboard speaker pins.
+        # Stereo PWM audio on the two mainboard speaker pins, and the module LED.
         self.assertEqual(devices["audio0"]["driver"], "audio-pwm")
         self.assertEqual(devices["audio0"]["bindings"], {"pwm": 7, "pwm_right": 8})
+        self.assertEqual(devices["pixels0"]["driver"], "neopixel")
+        self.assertEqual(devices["pixels0"]["bindings"], {"data": 21, "count": 1})
+        # The keyboard/power controller is the board's only keyboard and its
+        # power-off provider.
+        self.assertEqual(devices["core0"]["bindings"], {"i2c": "i2c0", "addr": 0x1f})
+        self.assertIn('SOLAR_OS_BOARD_POWEROFF_PROVIDER "core0"',
+                      generate_header(board, self.drivers))
 
         header = generate_header(board, self.drivers)
         # CD/DAT3 is held high so a card stays in SD mode.
