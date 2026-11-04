@@ -1072,53 +1072,69 @@ static esp_err_t ili9341_full_init(tft_ili9341_t *display) {
       return display->last_error;
     }
   } else if (display->config.st7365p) {
-    /* Clockwork PicoCalc panel. The configuration is the vendor's ILI9488-class
-     * sequence (PicoCalc/Code/picocalc_helloworld/lcdspi/lcdspi.c) except for
-     * the pixel format: the vendor firmware selects 18-bit colour (0x66, three
-     * bytes per pixel), while this driver streams RGB565, which the panel
-     * accepts (0x55) and which moves a third less data. Inversion is applied by
-     * the common code below when invert_color is set. */
-    const uint8_t gamma_pos[] = {
-        0x00, 0x03, 0x09, 0x08, 0x16, 0x0a, 0x3f, 0x78,
-        0x4c, 0x09, 0x0a, 0x08, 0x16, 0x1a, 0x0f,
-    };
-    const uint8_t gamma_neg[] = {
-        0x00, 0x16, 0x19, 0x03, 0x0f, 0x05, 0x32, 0x45,
-        0x46, 0x04, 0x0e, 0x0d, 0x35, 0x37, 0x0f,
-    };
-    const uint8_t power1[] = {0x17, 0x15};
-    const uint8_t power2[] = {0x41};
-    const uint8_t vcom[] = {0x00, 0x12, 0x80};
+    /* Clockwork PicoCalc panel (ST7365P). The vendor firmware initialises it
+     * with an ILI9488 sequence, but the ST7365P lays out its power, VCOM and
+     * gamma registers differently: there those bytes select VCOM 0.3 V instead
+     * of 1.0 V, a reserved GVDD code and a gamma curve shifted by one byte,
+     * which shows as bright horizontal bands on rows with detail over
+     * near-white backgrounds. This sequence writes the ST7365P's own power-on
+     * values instead, with command set 2 unlocked around them. Entry mode
+     * copies each channel's MSB into the extra bit when RGB565 is widened to
+     * the panel's 18 bits, so white is full white. Inversion is applied by the
+     * common code below when invert_color is set. */
+    const uint8_t enable_part1[] = {0xc3};
+    const uint8_t enable_part2[] = {0x96};
     const uint8_t madctl[] = {display->config.madctl};
     const uint8_t colmod[] = {0x55};
-    const uint8_t interface_mode[] = {0x00};
-    const uint8_t frame_rate[] = {0xa0};
-    const uint8_t inversion[] = {0x02};
-    const uint8_t function[] = {0x02, 0x02, 0x3b};
-    const uint8_t entry_mode[] = {0xc6};
-    const uint8_t image_function[] = {0x00};
-    const uint8_t adjust[] = {0xa9, 0x51, 0x2c, 0x82};
+    const uint8_t frame_rate[] = {0xa0, 0x10};
+    const uint8_t inversion[] = {0x01};
+    const uint8_t function[] = {0x80, 0x02, 0x3b};
+    const uint8_t entry_mode[] = {0x86};
+    const uint8_t power1[] = {0x80, 0x25};
+    const uint8_t power2[] = {0x13};
+    const uint8_t power3[] = {0xa5};
+    const uint8_t vcom[] = {0x1c};
+    const uint8_t vcom_offset[] = {0x00};
+    const uint8_t output_adjust[] = {
+        0x40, 0x8a, 0x00, 0x00, 0x25, 0x0a, 0x38, 0x33,
+    };
+    const uint8_t gamma[] = {
+        0xf0, 0x03, 0x05, 0x09, 0x0c, 0x0f, 0x3e,
+        0x77, 0x4f, 0x0f, 0x17, 0x17, 0x21, 0x23,
+    };
+    const uint8_t disable_part1[] = {0x3c};
+    const uint8_t disable_part2[] = {0x69};
 
-    if (!ili9341_checked_cmd_data(display, 0xe0, gamma_pos, sizeof(gamma_pos)) ||
-        !ili9341_checked_cmd_data(display, 0xe1, gamma_neg, sizeof(gamma_neg)) ||
-        !ili9341_checked_cmd_data(display, 0xc0, power1, sizeof(power1)) ||
-        !ili9341_checked_cmd_data(display, 0xc1, power2, sizeof(power2)) ||
-        !ili9341_checked_cmd_data(display, 0xc5, vcom, sizeof(vcom)) ||
+    if (!ili9341_checked_cmd(display, 0x11)) {
+      return display->last_error;
+    }
+    vTaskDelay(pdMS_TO_TICKS(120));
+    if (!ili9341_checked_cmd_data(display, 0xf0, enable_part1,
+                                  sizeof(enable_part1)) ||
+        !ili9341_checked_cmd_data(display, 0xf0, enable_part2,
+                                  sizeof(enable_part2)) ||
         !ili9341_checked_cmd_data(display, 0x36, madctl, sizeof(madctl)) ||
         !ili9341_checked_cmd_data(display, 0x3a, colmod, sizeof(colmod)) ||
-        !ili9341_checked_cmd_data(display, 0xb0, interface_mode,
-                                  sizeof(interface_mode)) ||
         !ili9341_checked_cmd_data(display, 0xb1, frame_rate, sizeof(frame_rate)) ||
         !ili9341_checked_cmd_data(display, 0xb4, inversion, sizeof(inversion)) ||
         !ili9341_checked_cmd_data(display, 0xb6, function, sizeof(function)) ||
         !ili9341_checked_cmd_data(display, 0xb7, entry_mode, sizeof(entry_mode)) ||
-        !ili9341_checked_cmd_data(display, 0xe9, image_function,
-                                  sizeof(image_function)) ||
-        !ili9341_checked_cmd_data(display, 0xf7, adjust, sizeof(adjust)) ||
-        !ili9341_checked_cmd(display, 0x11)) {
+        !ili9341_checked_cmd_data(display, 0xc0, power1, sizeof(power1)) ||
+        !ili9341_checked_cmd_data(display, 0xc1, power2, sizeof(power2)) ||
+        !ili9341_checked_cmd_data(display, 0xc2, power3, sizeof(power3)) ||
+        !ili9341_checked_cmd_data(display, 0xc5, vcom, sizeof(vcom)) ||
+        !ili9341_checked_cmd_data(display, 0xc6, vcom_offset,
+                                  sizeof(vcom_offset)) ||
+        !ili9341_checked_cmd_data(display, 0xe8, output_adjust,
+                                  sizeof(output_adjust)) ||
+        !ili9341_checked_cmd_data(display, 0xe0, gamma, sizeof(gamma)) ||
+        !ili9341_checked_cmd_data(display, 0xe1, gamma, sizeof(gamma)) ||
+        !ili9341_checked_cmd_data(display, 0xf0, disable_part1,
+                                  sizeof(disable_part1)) ||
+        !ili9341_checked_cmd_data(display, 0xf0, disable_part2,
+                                  sizeof(disable_part2))) {
       return display->last_error;
     }
-    vTaskDelay(pdMS_TO_TICKS(120));
   } else if (display->config.st7796) {
     const uint8_t f0_enable_1[] = {0xc3};
     const uint8_t f0_enable_2[] = {0x96};

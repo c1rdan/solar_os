@@ -1655,12 +1655,14 @@ the ESP32-S3 JTAG pads and are used here as ordinary GPIO.
 
 Current state (staged bring-up):
 
-- Display: the 320x320 ST7365P/ILI9488-class panel uses the `st7365p` driver
-  with the vendor's initialisation sequence, streams RGB565, and runs at
-  20 MHz (the datasheet write cycle is about 15 MHz, and other ESP32-S3 ports
-  run this panel at 40 MHz; raise `SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ` to try
-  it). If red and blue are swapped, set `SOLAR_OS_BOARD_DISPLAY_MADCTL` to
-  `0x48`.
+- Display: the 320x320 ST7365P panel uses the `st7365p` driver, streams
+  RGB565, and runs at 20 MHz (the datasheet write cycle is about 15 MHz, and
+  other ESP32-S3 ports run this panel at 40 MHz; raise
+  `SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ` to try it). If red and blue are
+  swapped, set `SOLAR_OS_BOARD_DISPLAY_MADCTL` to `0x48`. The driver programs
+  the controller's own power, VCOM and gamma values: the ILI9488 sequence in
+  the vendor firmware sets these registers wrongly on the ST7365P, which shows
+  as bright bands on text rows over white or light grey backgrounds.
 - Keyboard, battery, backlights and power: the mainboard's STM32 controller
   (`core0`, I2C address 0x1f on a private 10 kHz bus) supplies `keyboard0`,
   `battery0`, both backlights and the system power-off. It only runs while the

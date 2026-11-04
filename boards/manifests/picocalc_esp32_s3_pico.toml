@@ -44,9 +44,8 @@ psram_bytes = 2097152
 SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}}'
 # The keyboard/power controller can cut the whole system supply.
 SOLAR_OS_BOARD_POWEROFF_PROVIDER = '"core0"'
-# The PicoCalc panel is a 320x320 ST7365P/ILI9488-class LCD. Colours are
-# streamed as RGB565 (the vendor firmware uses 18-bit); see st7365p in
-# src/drivers/tft_ili9341.c.
+# The PicoCalc panel is a 320x320 ST7365P LCD. Colours are streamed as RGB565
+# (the vendor firmware uses 18-bit); see st7365p in src/drivers/tft_ili9341.c.
 SOLAR_OS_BOARD_DISPLAY_CONTROLLER = '"ST7365P"'
 SOLAR_OS_BOARD_DISPLAY_CONTROLLER_ST7365P = "1"
 SOLAR_OS_BOARD_DISPLAY_DRIVER_NAME = '"st7365p"'

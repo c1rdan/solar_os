@@ -1859,7 +1859,7 @@ hint = "0|1"
 allowed = [0, 1]
 
 [drivers.st7365p]
-summary = "320x320 color TFT (ST7365P/ILI9488-class)"
+summary = "320x320 color TFT (ST7365P)"
 package = "driver_display_st7365p"
 targets = ["esp32", "esp32s3"]
 capabilities = ["gfx", "expansion_spi", "expansion_gpio"]
