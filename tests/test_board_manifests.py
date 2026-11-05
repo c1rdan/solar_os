@@ -558,6 +558,11 @@ class BoardManifestTest(unittest.TestCase):
         # Only the genuinely spare Pico header pins are free.
         self.assertEqual({g for g, pin in pins.items() if pin["policy"] == "free"},
                          {9, 11, 12, 33, 34})
+        # Frames written at up to 80 MHz read back intact; the LCD runs at half
+        # that, an exact divider of the ESP32-S3's 80 MHz SPI source clock.
+        clock = int(board["defines"]["SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ"])
+        self.assertEqual(80_000_000 % clock, 0)
+        self.assertLessEqual(clock, 40_000_000)
 
         buses = {bus["name"]: bus for bus in board["buses"]}
         # The LCD owns SPI2 and the mainboard PSRAM is reserved SPI3: no

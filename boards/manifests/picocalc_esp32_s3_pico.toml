@@ -55,9 +55,10 @@ SOLAR_OS_BOARD_DISPLAY_WIDTH = "320"
 SOLAR_OS_BOARD_DISPLAY_HEIGHT = "320"
 SOLAR_OS_BOARD_DISPLAY_NATIVE_WIDTH = "320"
 SOLAR_OS_BOARD_DISPLAY_NATIVE_HEIGHT = "320"
-# The datasheet write cycle is 66 ns (about 15 MHz); 20 MHz is a conservative
-# start and community ESP32-S3 ports run this panel at 40 MHz.
-SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ = "20000000"
+# The datasheet write cycle is 66 ns (about 15 MHz), but frames written at up
+# to 80 MHz read back over SDO without a wrong pixel. 40 MHz leaves a twofold
+# margin and matches other ESP32-S3 ports.
+SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ = "40000000"
 # MX only (RGB order). SolarOS packs red first, so the BGR bit stays clear; set
 # 0x48 if red and blue come out swapped.
 SOLAR_OS_BOARD_DISPLAY_MADCTL = "0x40"
