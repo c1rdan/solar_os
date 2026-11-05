@@ -1714,6 +1714,11 @@ Current state (staged bring-up):
   or a keypress resumes it, and the keypress is then handled as usual, so
   Enter also runs the command line. Shift, Ctrl, Alt or Caps Lock alone and
   the controller's own Alt shortcuts do not resume it.
+- Light sleep: in the `battery` and `lowpower` profiles, and while the screen
+  is suspended, the module sleeps between key polls, about 80 percent of the
+  time when nothing is typed. Each sleep also switches off the module's
+  native USB port, so a computer loses the `cdc0` console and may stop trying
+  to reconnect; use `performance` or `balanced` while working over USB.
 - Storage: the microSD slot (`storage0`) is used in one-bit SDMMC mode on
   CLK1/CMD2/DAT0=42. DAT1 and DAT2 are not wired on the mainboard, so one bit is
   the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card
