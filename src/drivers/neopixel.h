@@ -12,7 +12,7 @@ typedef struct {
     rmt_channel_handle_t channel;
     rmt_encoder_handle_t encoder;
     int data_pin;
-    bool enabled;
+    bool enabled; /* RMT channel enabled; only while a frame is sent */
 } neopixel_t;
 
 esp_err_t neopixel_init(neopixel_t *strip, int data_pin);

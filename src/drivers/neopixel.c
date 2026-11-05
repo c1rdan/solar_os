@@ -5,10 +5,15 @@
 
 #include "driver/gpio.h"
 #include "esp_check.h"
+#include "esp_log.h"
+#include "esp_rom_sys.h"
+#include "sdkconfig.h"
 
 #define NEOPIXEL_RMT_RESOLUTION_HZ 10000000U
 #define NEOPIXEL_RESET_US 80U
 #define NEOPIXEL_WRITE_TIMEOUT_MS 1000
+#define NEOPIXEL_DISABLE_ATTEMPTS 100
+#define NEOPIXEL_DISABLE_RETRY_US 10U
 
 static const char *TAG = "neopixel";
 
@@ -175,35 +180,67 @@ esp_err_t neopixel_init(neopixel_t *strip, int data_pin)
         neopixel_deinit(strip);
         return ret;
     }
-    ret = rmt_enable(strip->channel);
+    /* Between frames the disabled channel still drives the line low. Keep
+     * that through light sleep instead of the floating sleep state. */
+    ret = gpio_sleep_sel_dis((gpio_num_t)data_pin);
     if (ret != ESP_OK) {
         neopixel_deinit(strip);
         return ret;
     }
-    strip->enabled = true;
     return ESP_OK;
+}
+
+/* The done interrupt can still be finishing on the other core when the wait
+ * returns, and the RMT driver rejects a disable until it has. */
+static esp_err_t neopixel_disable(neopixel_t *strip)
+{
+    esp_err_t ret = rmt_disable(strip->channel);
+    for (int attempt = 1;
+         ret == ESP_ERR_INVALID_STATE && attempt < NEOPIXEL_DISABLE_ATTEMPTS;
+         attempt++) {
+        esp_rom_delay_us(NEOPIXEL_DISABLE_RETRY_US);
+        ret = rmt_disable(strip->channel);
+    }
+    if (ret == ESP_OK) {
+        strip->enabled = false;
+    }
+    return ret;
 }
 
 esp_err_t neopixel_write(neopixel_t *strip, const uint8_t *grb, size_t byte_count)
 {
-    if (strip == NULL || !strip->enabled || strip->channel == NULL ||
+    if (strip == NULL || strip->channel == NULL ||
         strip->encoder == NULL || grb == NULL || byte_count == 0 ||
         (byte_count % 3U) != 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
+    /* An enabled channel holds a PM lock that blocks light sleep, so it is
+     * enabled only for one frame. */
+    if (!strip->enabled) {
+        ESP_RETURN_ON_ERROR(rmt_enable(strip->channel), TAG, "enable failed");
+        strip->enabled = true;
+    }
     const rmt_transmit_config_t transmit_config = {
         .loop_count = 0,
         .flags.eot_level = 0,
     };
-    ESP_RETURN_ON_ERROR(rmt_transmit(strip->channel,
-                                     strip->encoder,
-                                     grb,
-                                     byte_count,
-                                     &transmit_config),
-                        TAG,
-                        "transmit failed");
-    return rmt_tx_wait_all_done(strip->channel, NEOPIXEL_WRITE_TIMEOUT_MS);
+    esp_err_t ret = rmt_transmit(strip->channel,
+                                 strip->encoder,
+                                 grb,
+                                 byte_count,
+                                 &transmit_config);
+    if (ret == ESP_OK) {
+        ret = rmt_tx_wait_all_done(strip->channel, NEOPIXEL_WRITE_TIMEOUT_MS);
+    } else {
+        ESP_LOGE(TAG, "transmit failed: %s", esp_err_to_name(ret));
+    }
+    /* This also stops a frame that timed out. */
+    const esp_err_t disable_ret = neopixel_disable(strip);
+    if (disable_ret != ESP_OK) {
+        ESP_LOGE(TAG, "disable failed: %s", esp_err_to_name(disable_ret));
+    }
+    return ret != ESP_OK ? ret : disable_ret;
 }
 
 void neopixel_deinit(neopixel_t *strip)
@@ -212,7 +249,7 @@ void neopixel_deinit(neopixel_t *strip)
         return;
     }
     if (strip->enabled && strip->channel != NULL) {
-        (void)rmt_disable(strip->channel);
+        (void)neopixel_disable(strip);
     }
     if (strip->encoder != NULL) {
         (void)rmt_del_encoder(strip->encoder);
@@ -222,6 +259,10 @@ void neopixel_deinit(neopixel_t *strip)
     }
     if (GPIO_IS_VALID_GPIO(strip->data_pin)) {
         (void)gpio_reset_pin((gpio_num_t)strip->data_pin);
+#if CONFIG_ESP_SLEEP_GPIO_RESET_WORKAROUND || CONFIG_PM_SLP_DISABLE_GPIO
+        /* Give the pin back the default isolated sleep state. */
+        (void)gpio_sleep_sel_en((gpio_num_t)strip->data_pin);
+#endif
     }
     memset(strip, 0, sizeof(*strip));
     strip->data_pin = -1;
