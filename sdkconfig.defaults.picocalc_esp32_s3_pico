@@ -69,6 +69,16 @@ CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_FREERTOS_HZ=1000
 CONFIG_PM_ENABLE=y
+# Run the light-sleep entry and exit from IRAM. IDF's first wake-up estimate is
+# then about 0.8 ms instead of 9 ms, and a wake takes about 75 us instead of
+# 120 us. This costs about 8 KB of internal RAM.
+CONFIG_PM_SLP_IRAM_OPT=y
+CONFIG_PM_RTOS_IDLE_OPT=y
+# Power the CPU down in light sleep (the IDF default). Its 13 KB retention
+# buffer can only be found in internal RAM at boot, so this applies when the
+# saved profile is battery or lowpower; after a later switch the CPU stays
+# powered in sleep.
+CONFIG_PM_POWER_DOWN_CPU_IN_LIGHT_SLEEP=y
 # The ESP32-S3 is rated for 240 MHz. Power profiles may scale below this, but
 # `performance` must expose the board's full CPU frequency.
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

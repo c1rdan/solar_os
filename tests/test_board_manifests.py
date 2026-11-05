@@ -629,6 +629,9 @@ class BoardManifestTest(unittest.TestCase):
         self.assertIn("CONFIG_SPIRAM_MODE_QUAD=y", sdkconfig)
         self.assertIn("# CONFIG_SPIRAM_MODE_OCT is not set", sdkconfig)
         self.assertNotIn("CONFIG_SPIRAM_MODE_OCT=y", sdkconfig)
+        # Light sleep is entered from IRAM, so IDF's first wake-up estimate
+        # fits between key polls.
+        self.assertIn("CONFIG_PM_SLP_IRAM_OPT=y", sdkconfig)
         board_json = json.loads((ROOT / "boards/picocalc_esp32_s3_pico.json").read_text())
         self.assertEqual(board_json["build"]["psram_type"], "qspi")
         self.assertEqual(board_json["build"]["arduino"]["memory_type"], "qio_qspi")
