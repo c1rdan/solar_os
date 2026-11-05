@@ -21,10 +21,11 @@
  * the module is on its own USB cable) the controller does not answer: the
  * keyboard stays not-ready and polling continues until it appears. */
 #define SOLAR_OS_PICOCALC_CORE_ADDRESS 0x1fU
-/* Time to wait between writing a register number and reading it back. The
- * vendor firmware waits 16 ms; the bring-up value can be tuned per board with
- * the optional gap binding. */
-#define SOLAR_OS_PICOCALC_CORE_DEFAULT_GAP_MS 16
+/* Time to wait between writing a register number and reading it back. None
+ * is needed: the controller builds its reply in its I2C STOP interrupt, and the
+ * stock PicoMite firmware polls it with no wait. The optional gap binding adds
+ * a wait for testing. */
+#define SOLAR_OS_PICOCALC_CORE_DEFAULT_GAP_MS 0
 #define SOLAR_OS_PICOCALC_CORE_MAX_GAP_MS 50
 
 esp_err_t solar_os_picocalc_core_attach(

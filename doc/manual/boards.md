@@ -1674,8 +1674,10 @@ Current state (staged bring-up):
   `battery0`, both backlights and the system power-off. It only runs while the
   PicoCalc itself is powered; on the module's own USB power it does not answer,
   the keyboard stays not ready and polling resumes once it appears. The
-  optional `gap` binding (milliseconds, default 16) is the wait between
-  writing a register number and reading it back; lower it only after testing.
+  optional `gap` binding (milliseconds, default 0) adds a wait between
+  writing a register number and reading it back. None is needed: the
+  controller builds its reply as soon as the write ends, and the stock
+  PicoMite firmware reads it straight away.
 - Keys: the controller has already applied Shift, Caps Lock and the symbol
   layer, so SolarOS receives finished characters. Ctrl and Alt are passed as
   modifiers. Shift+Up/Down arrive as Page Up/Down, Shift+Tab is Home,
