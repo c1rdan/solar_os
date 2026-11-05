@@ -252,6 +252,7 @@ static esp_err_t battery_read(void *user, solar_os_battery_sample_t *sample)
                                                             config.min_voltage_mv,
                                                             config.max_voltage_mv),
         .calibrated = false,
+        .voltage_estimated = true,
         .percent_valid = true,
         .percent = battery.percent,
         /* Charging implies external power; the converse is unknown. */

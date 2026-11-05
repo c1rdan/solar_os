@@ -363,6 +363,7 @@ esp_err_t solar_os_battery_get_status(solar_os_battery_status_t *status)
         : battery_percent_from_voltage(averaged_mv);
     status->percent_estimated = !sample.percent_valid;
     status->adc_calibrated = sample.calibrated;
+    status->voltage_estimated = sample.voltage_estimated;
     const bool inferred_charging = battery_monitor_indicates_external_power();
     status->external_power = sample.external_power_valid
         ? sample.external_power

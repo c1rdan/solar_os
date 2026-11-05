@@ -18,6 +18,7 @@ typedef struct {
     uint8_t percent;
     bool percent_estimated;
     bool adc_calibrated;
+    bool voltage_estimated;
     bool external_power;
     bool charging;
     bool charging_known;
@@ -48,6 +49,8 @@ typedef struct {
 typedef struct {
     uint16_t battery_mv;
     bool calibrated;
+    /* battery_mv is derived from the percentage, not measured. */
+    bool voltage_estimated;
     bool percent_valid;
     uint8_t percent;
     bool external_power_valid;

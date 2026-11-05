@@ -150,6 +150,18 @@ int main(void)
     status = read_status();
     assert(status.percent == 73U);
     assert(!status.percent_estimated);
+    assert(status.adc_calibrated && !status.voltage_estimated);
+
+    /* A gauge that reports only a percentage derives the voltage from it. */
+    provider_sample = (solar_os_battery_sample_t) {
+        .battery_mv = 4120U,
+        .voltage_estimated = true,
+        .percent_valid = true,
+        .percent = 100U,
+    };
+    status = read_status();
+    assert(status.percent == 100U && !status.percent_estimated);
+    assert(!status.adc_calibrated && status.voltage_estimated);
 
     provider_sample.percent = 129U;
     status = read_status();

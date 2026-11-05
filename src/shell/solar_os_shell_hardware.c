@@ -634,14 +634,17 @@ static void battery_print_status(solar_os_shell_io_t *term)
     }
 
     solar_os_shell_io_printf(term,
-                             "Battery: %u.%03u V\n",
+                             "Battery: %u.%03u V%s\n",
                              (unsigned)(status.voltage_mv / 1000U),
-                             (unsigned)(status.voltage_mv % 1000U));
+                             (unsigned)(status.voltage_mv % 1000U),
+                             status.voltage_estimated ? " estimated" : "");
+    /* The ADC caveat only applies to a charge derived from the voltage. */
     solar_os_shell_io_printf(term,
                              "Charge: %u%%%s%s\n",
                              (unsigned)status.percent,
                              status.percent_estimated ? " estimated" : "",
-                             status.adc_calibrated ? "" : " (uncalibrated ADC)");
+                             status.percent_estimated && !status.adc_calibrated ?
+                                 " (uncalibrated ADC)" : "");
     const char *power = status.external_power ? "external" : "unknown";
     if (!status.external_power && status.charging_known && !status.charging) {
         power = "battery";
