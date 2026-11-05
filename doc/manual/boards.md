@@ -1670,10 +1670,13 @@ Current state (staged bring-up):
   ST7365P, which shows as bright bands on text rows over white or light grey
   backgrounds.
 - Keyboard, battery, backlights and power: the mainboard's STM32 controller
-  (`core0`, I2C address 0x1f on a private 10 kHz bus) supplies `keyboard0`,
+  (`core0`, I2C address 0x1f on a private 100 kHz bus) supplies `keyboard0`,
   `battery0`, both backlights and the system power-off. It only runs while the
   PicoCalc itself is powered; on the module's own USB power it does not answer,
-  the keyboard stays not ready and polling resumes once it appears. The
+  the keyboard stays not ready and polling resumes once it appears. The stock
+  PicoMite firmware runs this bus at 10 kHz; at 100 kHz an exchange takes
+  about 0.8 ms instead of about 5 ms, so each key poll keeps the
+  processor awake for far less time. The
   optional `gap` binding (milliseconds, default 0) adds a wait between
   writing a register number and reading it back. None is needed: the
   controller builds its reply as soon as the write ends, and the stock

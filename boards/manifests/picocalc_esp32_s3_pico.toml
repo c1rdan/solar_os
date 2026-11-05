@@ -75,8 +75,10 @@ SOLAR_OS_BOARD_PIN_SPI_SCLK = "GPIO_NUM_35"
 SOLAR_OS_BOARD_PIN_SPI_MISO = "GPIO_NUM_37"
 SOLAR_OS_BOARD_PIN_SPI_MOSI = "GPIO_NUM_36"
 SOLAR_OS_BOARD_SPI_MAX_TRANSFER_SZ = "4096"
-# The I2C bus belongs to the keyboard/power MCU (STM32 at 0x1F), which the
-# PicoCalc firmware drives at 10 kHz.
+# The I2C bus belongs to the keyboard/power MCU (STM32 at 0x1F). The stock
+# PicoMite firmware drives it at 10 kHz; the controller stretches the clock
+# while it answers, and 100 kHz cuts the time each key poll holds the bus
+# tenfold.
 SOLAR_OS_BOARD_I2C_PORT = "I2C_NUM_0"
 SOLAR_OS_BOARD_PIN_I2C_SDA = "GPIO_NUM_17"
 SOLAR_OS_BOARD_PIN_I2C_SCL = "GPIO_NUM_18"
@@ -118,7 +120,7 @@ sharing = "exclusive"
 port = "I2C_NUM_0"
 sda = 17
 scl = 18
-speed_hz = 10000
+speed_hz = 100000
 
 [[buses]]
 name = "uart0"

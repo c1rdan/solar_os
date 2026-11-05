@@ -582,8 +582,9 @@ class BoardManifestTest(unittest.TestCase):
         # runtime SPI host may be offered.
         self.assertEqual(buses["spi0"]["host"], "SPI2_HOST")
         self.assertEqual(board["runtime"]["spi_hosts"], [])
-        # The keyboard controller is run at its vendor 10 kHz on a private bus.
-        self.assertEqual(buses["i2c0"]["speed_hz"], 10000)
+        # The keyboard controller has a private bus, run at 100 kHz rather
+        # than PicoMite's 10 kHz to keep each key poll short.
+        self.assertEqual(buses["i2c0"]["speed_hz"], 100000)
         self.assertEqual(buses["i2c0"]["sharing"], "exclusive")
         self.assertEqual((buses["i2c0"]["sda"], buses["i2c0"]["scl"]), (17, 18))
 
