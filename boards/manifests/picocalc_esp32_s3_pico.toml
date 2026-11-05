@@ -41,7 +41,9 @@ psram_bytes = 2097152
 # GPIO41 is the TF slot's CD/DAT3 line. A card sees it low during CMD0 as a
 # request for SPI mode, so hold it high before the SD driver starts: the card
 # is used in 1-bit SDMMC mode.
-SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}}'
+# GPIO7 and GPIO8 are the audio PWM outputs: drive them low so the amplifier
+# input does not float until audio0 attaches and holds them there.
+SOLAR_OS_BOARD_BOOT_OUTPUTS = '{{.pin = GPIO_NUM_41, .level = 1}, {.pin = GPIO_NUM_7, .level = 0}, {.pin = GPIO_NUM_8, .level = 0}}'
 # The keyboard/power controller can cut the whole system supply.
 SOLAR_OS_BOARD_POWEROFF_PROVIDER = '"core0"'
 # The PicoCalc panel is a 320x320 ST7365P LCD. Colours are streamed as RGB565

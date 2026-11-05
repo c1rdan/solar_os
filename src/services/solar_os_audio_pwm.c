@@ -4,10 +4,13 @@
 #include <string.h>
 
 #include "audio_pwm.h"
+#include "esp_log.h"
 #include "solar_os_audio.h"
 #include "solar_os_stream.h"
 
 #define AUDIO_PWM_DEVICE_NAME_MAX 16U
+
+static const char *TAG = "audio-pwm";
 
 typedef struct {
     bool attached;
@@ -177,6 +180,9 @@ esp_err_t solar_os_audio_pwm_attach(
     if (pin < 0 || (pin_right >= 0 && pin_right == pin)) {
         return ESP_ERR_INVALID_ARG;
     }
+    /* Drive the outputs low and hold them there between sounds rather than
+     * leave them floating. Failures from here on release the hold. */
+    audio_pwm_park_pins((gpio_num_t)pin, (gpio_num_t)pin_right);
 
     memset(&pwm_audio, 0, sizeof(pwm_audio));
     pwm_audio.pin = pin;
@@ -190,6 +196,7 @@ esp_err_t solar_os_audio_pwm_attach(
                                     name);
     if (stream_len < 0 || (size_t)stream_len >= sizeof(pwm_audio.stream_id)) {
         memset(&pwm_audio, 0, sizeof(pwm_audio));
+        audio_pwm_release_pins((gpio_num_t)pin, (gpio_num_t)pin_right);
         return ESP_ERR_INVALID_ARG;
     }
     pwm_audio.attached = true;
@@ -197,6 +204,7 @@ esp_err_t solar_os_audio_pwm_attach(
     esp_err_t err = audio_pwm_register_stream(&pwm_audio);
     if (err != ESP_OK) {
         memset(&pwm_audio, 0, sizeof(pwm_audio));
+        audio_pwm_release_pins((gpio_num_t)pin, (gpio_num_t)pin_right);
         return err;
     }
 
@@ -222,8 +230,11 @@ esp_err_t solar_os_audio_pwm_attach(
     if (err != ESP_OK) {
         (void)solar_os_stream_unregister(pwm_audio.stream_id);
         memset(&pwm_audio, 0, sizeof(pwm_audio));
+        audio_pwm_release_pins((gpio_num_t)pin, (gpio_num_t)pin_right);
+        return err;
     }
-    return err;
+    ESP_LOGI(TAG, "%s attached: %s, held low between sounds", pwm_audio.id, info.name);
+    return ESP_OK;
 }
 
 esp_err_t solar_os_audio_pwm_detach(const char *name)
@@ -239,6 +250,8 @@ esp_err_t solar_os_audio_pwm_detach(const char *name)
     if (err != ESP_OK) {
         return err;
     }
+    /* Leave the pins driven low but free for their next user. */
+    audio_pwm_release_pins((gpio_num_t)pwm_audio.pin, (gpio_num_t)pwm_audio.pin_right);
     memset(&pwm_audio, 0, sizeof(pwm_audio));
     return ESP_OK;
 }

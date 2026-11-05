@@ -421,8 +421,10 @@ aplay /audio/example.mp3
 runtime-only. Run `audio default auto` to return to the first compatible output.
 Detaching the selected device also returns selection to `auto`.
 
-Do not connect a speaker directly to the GPIO. The pin provides a 3.3 V PWM
-signal centered near 50 percent duty during silence. Use a reconstruction
+Do not connect a speaker directly to the GPIO. While a stream is open the pin
+provides a 3.3 V PWM signal centered near 50 percent duty during silence. It
+fades in from 0 V over 40 ms when a stream opens, fades back out after the last
+sample, and is held low between streams. Use a reconstruction
 low-pass filter, a DC-blocking/coupling stage, and an amplifier suitable for the
 speaker impedance. Keep the board and amplifier grounds common. Stop playback
 before detaching; detach reports busy while the playback stream is open.

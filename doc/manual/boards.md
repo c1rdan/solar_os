@@ -1714,7 +1714,10 @@ Current state (staged bring-up):
 - Audio: `audio0` plays 16-bit PCM in stereo through two LEDC PWM outputs
   (left GPIO7, right GPIO8) at 16 kHz with 8-bit resolution on a 78 kHz
   carrier; the mainboard's RC filter and amplifier turn them into line level.
-  Mono sources play on both channels. The amplifier enable and the
+  Mono sources play on both channels. The outputs ramp up over 40 ms before
+  each sound and back down after it, and are held low between sounds. A pop
+  when the PicoCalc switches on comes from the mainboard amplifier powering
+  up, which the module cannot control. The amplifier enable and the
   headphone-jack detection that mutes the speaker belong to the keyboard
   controller and are not reachable from here, so there is no software mute and
   the speaker cannot be told apart from headphones.

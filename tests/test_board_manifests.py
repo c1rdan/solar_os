@@ -600,6 +600,10 @@ class BoardManifestTest(unittest.TestCase):
         header = generate_header(board, self.drivers)
         # CD/DAT3 is held high so a card stays in SD mode.
         self.assertIn("{.pin = GPIO_NUM_41, .level = 1}", header)
+        # The audio outputs are driven low at boot rather than left floating
+        # until audio0 attaches.
+        self.assertIn("{.pin = GPIO_NUM_7, .level = 0}", header)
+        self.assertIn("{.pin = GPIO_NUM_8, .level = 0}", header)
 
         # Quad PSRAM only: octal would claim GPIO33-37 and abort the boot.
         sdkconfig = (ROOT / "sdkconfig.defaults.picocalc_esp32_s3_pico").read_text()
