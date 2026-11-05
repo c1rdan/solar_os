@@ -21,6 +21,15 @@
 #define POWER_CPU_BATTERY_MHZ 160U
 #define POWER_CPU_LOWPOWER_MHZ 80U
 
+/* A board whose keyboard cannot wake light sleep may suspend the screen at
+ * the idle timeout instead, so a keypress brings it back. */
+#ifndef SOLAR_OS_BOARD_IDLE_ACTION
+#define SOLAR_OS_BOARD_IDLE_ACTION SOLAR_OS_POWER_KEY_ACTION_SLEEP
+#endif
+_Static_assert(SOLAR_OS_BOARD_IDLE_ACTION == SOLAR_OS_POWER_KEY_ACTION_SLEEP ||
+               SOLAR_OS_BOARD_IDLE_ACTION == SOLAR_OS_POWER_KEY_ACTION_SUSPEND,
+               "SOLAR_OS_BOARD_IDLE_ACTION must be SLEEP or SUSPEND");
+
 static const char *TAG = "solar_os_power";
 static portMUX_TYPE off_lock = portMUX_INITIALIZER_UNLOCKED;
 static solar_os_power_off_fn_t off_provider;
@@ -64,6 +73,7 @@ static solar_os_power_status_t power_status = {
     .effective_profile = SOLAR_OS_POWER_PROFILE_PERFORMANCE,
     .key_action = SOLAR_OS_POWER_KEY_ACTION_DEFAULT,
     .key_long_action = SOLAR_OS_POWER_KEY_ACTION_DEFAULT,
+    .idle_action = SOLAR_OS_BOARD_IDLE_ACTION,
 };
 static uint32_t sleep_enter_ms;
 static uint32_t automatic_light_sleep_holdoff_until_ms;
@@ -391,6 +401,7 @@ esp_err_t solar_os_power_init(void)
     power_status.key_action = SOLAR_OS_POWER_KEY_ACTION_DEFAULT;
     power_status.key_long_action = SOLAR_OS_POWER_KEY_ACTION_DEFAULT;
     power_status.idle_sleep_ms = profile_default_idle_ms(power_status.profile);
+    power_status.idle_action = SOLAR_OS_BOARD_IDLE_ACTION;
     power_status.initialized = true;
 
     nvs_handle_t nvs;

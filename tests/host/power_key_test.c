@@ -3,10 +3,18 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef SOLAR_OS_BOARD_IDLE_ACTION
+#define EXPECTED_IDLE_ACTION SOLAR_OS_BOARD_IDLE_ACTION
+#else
+#define EXPECTED_IDLE_ACTION SOLAR_OS_POWER_KEY_ACTION_SLEEP
+#endif
+
 #include "../../src/services/solar_os_power.c"
 
 static uint8_t saved[3], pending[3];
 static bool present[3], pending_present[3], fail_save;
+static uint32_t saved_idle, pending_idle;
+static bool idle_present, pending_idle_present;
 static unsigned commits;
 
 static size_t key_index(const char *key)
@@ -23,6 +31,8 @@ esp_err_t nvs_open(const char *name, nvs_open_mode_t mode, nvs_handle_t *handle)
     if (mode == NVS_READWRITE) {
         memcpy(pending, saved, sizeof(saved));
         memcpy(pending_present, present, sizeof(present));
+        pending_idle = saved_idle;
+        pending_idle_present = idle_present;
     }
     return ESP_OK;
 }
@@ -45,12 +55,18 @@ esp_err_t nvs_set_u8(nvs_handle_t handle, const char *key, uint8_t value)
 }
 esp_err_t nvs_get_u32(nvs_handle_t handle, const char *key, uint32_t *value)
 {
-    (void)handle; (void)key; (void)value;
-    return ESP_ERR_NOT_FOUND;
+    (void)handle;
+    assert(strcmp(key, "idle_ms") == 0);
+    if (!idle_present) return ESP_ERR_NOT_FOUND;
+    *value = saved_idle;
+    return ESP_OK;
 }
 esp_err_t nvs_set_u32(nvs_handle_t handle, const char *key, uint32_t value)
 {
-    (void)handle; (void)key; (void)value;
+    (void)handle;
+    assert(strcmp(key, "idle_ms") == 0);
+    pending_idle = value;
+    pending_idle_present = true;
     return ESP_OK;
 }
 esp_err_t nvs_commit(nvs_handle_t handle)
@@ -59,6 +75,8 @@ esp_err_t nvs_commit(nvs_handle_t handle)
     if (fail_save) return ESP_FAIL;
     memcpy(saved, pending, sizeof(saved));
     memcpy(present, pending_present, sizeof(present));
+    saved_idle = pending_idle;
+    idle_present = pending_idle_present;
     commits++;
     return ESP_OK;
 }
@@ -147,6 +165,35 @@ int main(void)
     assert(status.key_long_action == SOLAR_OS_POWER_KEY_ACTION_SHUTDOWN);
     assert(!solar_os_power_parse_key_action(NULL, NULL));
     assert(solar_os_power_set_key_long_action(255) == ESP_ERR_INVALID_ARG);
-    puts("power KEY settings tests passed");
+
+    /* The idle action is the board's; a saved timeout still loads with it. */
+    idle_present = false;
+    status = boot();
+    assert(status.idle_sleep_ms == 0U && status.idle_action == EXPECTED_IDLE_ACTION);
+    assert(solar_os_power_set_idle_sleep_ms(15000U) == ESP_OK);
+    status = boot();
+    assert(status.idle_sleep_ms == 15000U && status.idle_action == EXPECTED_IDLE_ACTION);
+    assert(solar_os_power_set_profile(SOLAR_OS_POWER_PROFILE_LOWPOWER) == ESP_OK);
+    status = boot();
+    assert(status.idle_sleep_ms == 60000U && status.idle_action == EXPECTED_IDLE_ACTION);
+    assert(solar_os_power_set_idle_sleep_ms(15000U) == ESP_OK);
+    /* The countdown runs from the last activity, stops while suspended and
+     * starts again from the activity noted on resume. */
+    solar_os_power_note_activity(1000U);
+    assert(!solar_os_power_should_idle_sleep(15999U));
+    assert(solar_os_power_should_idle_sleep(16000U));
+    assert(solar_os_power_begin_suspend() == ESP_OK);
+    assert(!solar_os_power_should_idle_sleep(60000U));
+    solar_os_power_get_status(&status);
+    assert(status.effective_profile == SOLAR_OS_POWER_PROFILE_LOWPOWER);
+    assert(solar_os_power_end_suspend() == ESP_OK);
+    solar_os_power_note_activity(60000U);
+    assert(!solar_os_power_should_idle_sleep(74999U));
+    assert(solar_os_power_should_idle_sleep(75000U));
+    assert(solar_os_power_set_idle_sleep_ms(0U) == ESP_OK);
+    assert(!solar_os_power_should_idle_sleep(200000U));
+    solar_os_power_get_status(&status);
+    assert(status.idle_action == EXPECTED_IDLE_ACTION);
+    puts("power KEY and idle settings tests passed");
     return 0;
 }

@@ -892,6 +892,8 @@ static void power_print_status(solar_os_shell_io_t *term)
     solar_os_shell_io_printf(term, "KEY long press: %s\n",
                              solar_os_power_key_action_name(status.key_long_action));
     solar_os_shell_io_printf(term, "Idle sleep: %s\n", idle_text);
+    solar_os_shell_io_printf(term, "Idle action: %s\n",
+                             solar_os_power_key_action_name(status.idle_action));
     solar_os_shell_io_printf(term,
                              "Light sleep count: %" PRIu32 "\n",
                              status.light_sleep_count);
@@ -961,8 +963,9 @@ void solar_os_shell_cmd_power(solar_os_context_t *ctx, int argc, char **argv)
                 solar_os_shell_io_writeln(term, "idle: off");
             } else {
                 solar_os_shell_io_printf(term,
-                                         "idle: %" PRIu32 " seconds\n",
-                                         status.idle_sleep_ms / 1000U);
+                                         "idle: %" PRIu32 " seconds (%s)\n",
+                                         status.idle_sleep_ms / 1000U,
+                                         solar_os_power_key_action_name(status.idle_action));
             }
             return;
         }
@@ -989,9 +992,12 @@ void solar_os_shell_cmd_power(solar_os_context_t *ctx, int argc, char **argv)
             if (idle_ms == 0) {
                 solar_os_shell_io_writeln(term, "power idle: off");
             } else {
+                solar_os_power_status_t status;
+                solar_os_power_get_status(&status);
                 solar_os_shell_io_printf(term,
-                                         "power idle: %" PRIu32 " seconds\n",
-                                         idle_ms / 1000U);
+                                         "power idle: %" PRIu32 " seconds (%s)\n",
+                                         idle_ms / 1000U,
+                                         solar_os_power_key_action_name(status.idle_action));
             }
         } else {
             solar_os_shell_io_printf(term,

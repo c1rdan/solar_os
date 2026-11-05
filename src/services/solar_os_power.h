@@ -42,6 +42,8 @@ typedef struct {
     solar_os_power_key_action_t key_action;
     solar_os_power_key_action_t key_long_action;
     uint32_t idle_sleep_ms;
+    /* What the idle timeout does: SLEEP or SUSPEND, fixed per board. */
+    solar_os_power_key_action_t idle_action;
     uint32_t cpu_min_mhz;
     uint32_t cpu_max_mhz;
     bool automatic_light_sleep;

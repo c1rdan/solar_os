@@ -129,6 +129,7 @@ TARGETS += io_layout_test
 TARGETS += io_layout_can_test
 TARGETS += batmon_job_test
 TARGETS += power_key_test power_key_wired_test power_key_input_test power_key_custom_test
+TARGETS += power_key_idle_suspend_test
 
 shell_table_test: shell_table_test.c $(ROOT)/src/shell/solar_os_shell_io.c $(ROOT)/src/shell/solar_os_shell_io.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -ffunction-sections -fdata-sections \
@@ -149,7 +150,8 @@ io_layout_test io_layout_can_test: io_layout_test.c $(ROOT)/src/apps/solar_os_io
 power_key_wired_test: override CFLAGS += -DSOLAR_OS_BOARD_HAS_WIRED_KEYBOARD=1 -DSOLAR_OS_BOARD_KEY_SHORT_INPUT_KEY=SOLAR_OS_KEY_ENTER
 power_key_input_test: override CFLAGS += -DSOLAR_OS_BOARD_KEY_SHORT_INPUT_KEY=SOLAR_OS_KEY_APP_EXIT
 power_key_custom_test: override CFLAGS += -DSOLAR_OS_BOARD_KEY_SHORT_INPUT_KEY=0x09
-power_key_test power_key_wired_test power_key_input_test power_key_custom_test: power_key_test.c $(ROOT)/src/services/solar_os_power.c $(ROOT)/src/services/solar_os_power.h $(wildcard power_stubs/*.h)
+power_key_idle_suspend_test: override CFLAGS += -DSOLAR_OS_BOARD_HAS_WIRED_KEYBOARD=1 -DSOLAR_OS_BOARD_IDLE_ACTION=SOLAR_OS_POWER_KEY_ACTION_SUSPEND
+power_key_test power_key_wired_test power_key_input_test power_key_custom_test power_key_idle_suspend_test: power_key_test.c $(ROOT)/src/services/solar_os_power.c $(ROOT)/src/services/solar_os_power.h $(wildcard power_stubs/*.h)
 	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -Ipower_stubs -I. \
 		-I$(ROOT)/src/services power_key_test.c -Wl,--gc-sections -o $@
 
@@ -1450,6 +1452,7 @@ test: $(TARGETS)
 	./power_key_wired_test
 	./power_key_input_test
 	./power_key_custom_test
+	./power_key_idle_suspend_test
 	./terminal_preferences_test
 	./tui_widgets_test
 	./wireguard_crypto_test

@@ -2099,8 +2099,7 @@ static void process_app_requests(void)
 
 static void maybe_enter_idle_sleep(void)
 {
-    if (!SLEEP_WAKE_AVAILABLE ||
-        deferred_sleep_pending ||
+    if (deferred_sleep_pending ||
         !solar_os_sessions_foreground_is_shell() ||
         key_pressed ||
         key_ignore_until_released) {
@@ -2108,7 +2107,16 @@ static void maybe_enter_idle_sleep(void)
     }
 
     const uint32_t now_ms = millis_u32();
-    if (solar_os_power_should_idle_sleep(now_ms)) {
+    if (!solar_os_power_should_idle_sleep(now_ms)) {
+        return;
+    }
+    solar_os_power_status_t status;
+    solar_os_power_get_status(&status);
+    if (status.idle_action == SOLAR_OS_POWER_KEY_ACTION_SUSPEND) {
+        enter_suspend("power idle");
+        /* Count down again from here if the suspend did not take. */
+        solar_os_power_note_activity(now_ms);
+    } else if (SLEEP_WAKE_AVAILABLE) {
         enter_light_sleep("power idle");
     }
 }

@@ -55,6 +55,9 @@ static int key_release_action;
 static bool key_irq_pending, key_pressed, key_long_press_fired, key_ignore_until_released;
 static uint32_t key_pressed_ms, last_status_update_ms;
 static uint32_t suspend_input_key_press_generation;
+static bool deferred_sleep_pending, idle_due, foreground_shell = true;
+static int os_ctx;
+static void *terminal;
 static uint32_t session_overlay_until_ms, last_session_overlay_draw_ms;
 static char session_overlay_title[48];
 static bool session_overlay_persistent, session_overlay_after_next_frame, session_switch_alt_held;
@@ -92,9 +95,10 @@ esp_err_t solar_os_power_begin_explicit_sleep(void)
 }
 esp_err_t solar_os_power_end_explicit_sleep(void) { status.explicit_sleep_active = false; ends++; return ESP_OK; }
 esp_err_t solar_os_power_begin_suspend(void) { status.suspend_active = true; suspends++; return ESP_OK; }
-esp_err_t solar_os_power_end_suspend(void) { status.suspend_active = false; return ESP_OK; }
+esp_err_t solar_os_power_end_suspend(void) { status.suspend_active = false; wakes++; return ESP_OK; }
+bool solar_os_power_should_idle_sleep(uint32_t tick) { (void)tick; return idle_due; }
 const char *solar_os_power_profile_name(solar_os_power_profile_t profile) { (void)profile; return "test"; }
-static void exit_suspend(const char *reason) { (void)reason; status.suspend_active = false; wakes++; }
+static void exit_suspend(const char *reason);
 static void resume_display_after_sleep(uint32_t tick) { (void)tick; resumes++; }
 void solar_os_power_note_activity(uint32_t tick) { status.last_activity_ms = tick; }
 void solar_os_power_note_sleep_enter(uint32_t tick) { (void)tick; }
@@ -103,6 +107,12 @@ void solar_os_power_note_sleep_exit(uint32_t tick, int cause, uint64_t mask, boo
 esp_err_t solar_os_power_hold_automatic_light_sleep(uint32_t duration) { (void)duration; return ESP_OK; }
 static esp_err_t solar_os_display_show_power_state(const char *text) { assert(text[0]); return ESP_OK; }
 static esp_err_t solar_os_display_suspend_primary(void) { return ESP_OK; }
+static esp_err_t solar_os_display_resume_primary(void) { return ESP_OK; }
+static void solar_os_display_clear_power_state(void) {}
+static void dispatch_app_resume(uint32_t tick) { (void)tick; }
+static bool solar_os_context_graphics_active(const int *ctx) { (void)ctx; return true; }
+static void solar_os_terminal_invalidate_render(void *target) { (void)target; }
+static bool solar_os_sessions_foreground_is_shell(void) { return foreground_shell; }
 static esp_err_t solar_os_display_set_overlay_active(void *display, bool active) { (void)display; assert(!active); return ESP_OK; }
 static esp_err_t esp_sleep_disable_wakeup_source(int source)
 { assert(source == ESP_SLEEP_WAKEUP_ALL); active_wake_mask = 0; return ESP_OK; }
@@ -181,6 +191,43 @@ int main(void)
         prepare_line_active_ms = 0;
         line_active_until = 0;
     }
-    puts("Board wake input, suspend, light/deep sleep and rollback passed");
+
+    /* The idle timeout: SUSPEND suspends instead of sleeping and counts down
+     * again from there; SLEEP keeps light sleep. */
+    now += 5000U;
+    key_capability = SOLAR_OS_BOARD_HAS_KEY;
+    const unsigned suspend_ok = SOLAR_OS_BOARD_HAS_KEY || SOLAR_OS_BOARD_HAS_WIRED_KEYBOARD;
+    const unsigned idle_sleeps = sleeps, idle_suspends = suspends, idle_wakes = wakes;
+    status.idle_action = SOLAR_OS_POWER_KEY_ACTION_SUSPEND;
+    maybe_enter_idle_sleep();
+    assert(suspends == idle_suspends && !status.suspend_active);
+    idle_due = true;
+    foreground_shell = false; maybe_enter_idle_sleep(); foreground_shell = true;
+    deferred_sleep_pending = true; maybe_enter_idle_sleep(); deferred_sleep_pending = false;
+    assert(suspends == idle_suspends);
+    status.last_activity_ms = 0U;
+    maybe_enter_idle_sleep();
+    assert(suspends == idle_suspends + suspend_ok && status.suspend_active == suspend_ok);
+    assert(sleeps == idle_sleeps && !status.explicit_sleep_active);
+    assert(status.last_activity_ms == now);
+    if (suspend_ok) {
+        /* Never suspends again while suspended, even if asked. */
+        now += 1000U;
+        maybe_enter_idle_sleep();
+        assert(suspends == idle_suspends + 1U && status.suspend_active && sleeps == idle_sleeps);
+        /* Any key resumes and restarts the countdown. */
+        now += 1000U;
+        input_generation++;
+        maybe_exit_suspend_for_input();
+        assert(!status.suspend_active && wakes == idle_wakes + 1U);
+        assert(status.last_activity_ms == now);
+    }
+    status.idle_action = SOLAR_OS_POWER_KEY_ACTION_SLEEP;
+    maybe_enter_idle_sleep();
+    assert(suspends == idle_suspends + suspend_ok && !status.suspend_active);
+    assert(sleeps == idle_sleeps + (SLEEP_WAKE_AVAILABLE ? 1U : 0U));
+    assert(!status.explicit_sleep_active);
+    idle_due = false;
+    puts("Board wake input, suspend, light/deep sleep, idle action and rollback passed");
     return 0;
 }

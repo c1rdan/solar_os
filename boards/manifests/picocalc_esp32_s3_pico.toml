@@ -84,6 +84,9 @@ SOLAR_OS_BOARD_PIN_KEY = "GPIO_NUM_0"
 SOLAR_OS_BOARD_KEY_ACTIVE_LEVEL = "0"
 SOLAR_OS_BOARD_KEY_PULL_UP = "1"
 SOLAR_OS_BOARD_KEY_PULL_DOWN = "0"
+# The controller has no interrupt line, so the keyboard cannot wake light
+# sleep. The idle timeout suspends the screen instead; a keypress resumes it.
+SOLAR_OS_BOARD_IDLE_ACTION = "SOLAR_OS_POWER_KEY_ACTION_SUSPEND"
 SOLAR_OS_BOARD_TERMINAL_DEFAULT_TEXT_SIZE = "SOLAR_OS_TERMINAL_TEXT_SIZE_16"
 # UART0 is wired to the module's CH343 USB bridge. The console itself runs
 # over native USB Serial/JTAG.

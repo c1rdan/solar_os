@@ -85,6 +85,19 @@ class BoardManifestTest(unittest.TestCase):
                 header = generate_header(board, self.drivers)
                 self.assertIn(f"#define SOLAR_OS_BOARD_HAS_WIRED_KEYBOARD {expected}", header)
 
+    def test_only_the_picocalc_suspends_at_the_idle_timeout(self) -> None:
+        # The PicoCalc keyboard cannot wake light sleep, so its idle timeout
+        # suspends instead. Every other board keeps the default light sleep.
+        for path in sorted(self.manifest_dir.glob("*.toml")):
+            with self.subTest(board=path.stem):
+                board = load_board_manifest(path, self.manifest_dir)
+                header = generate_header(board, self.drivers)
+                if path.stem == "picocalc_esp32_s3_pico":
+                    self.assertIn("#define SOLAR_OS_BOARD_IDLE_ACTION "
+                                  "SOLAR_OS_POWER_KEY_ACTION_SUSPEND", header)
+                else:
+                    self.assertNotIn("SOLAR_OS_BOARD_IDLE_ACTION", header)
+
     def test_stream_dlp_generates_typed_stream_binding_on_headless_board(self) -> None:
         board = load_board_manifest(
             self.manifest_dir / "esp32_s3_devkitc1_n16r8.toml", self.manifest_dir)

@@ -1695,12 +1695,17 @@ Current state (staged bring-up):
   While the screen is off (`suspend`, deep sleep, shutdown) the LCD backlight
   drops to that lowest step. Waking restores the `setterm brightness` level,
   including one set while the screen was off; a change made with Alt+`,` or
-  Alt+`.` is not kept. Light sleep (`sleep` or idle sleep) does not dim it.
+  Alt+`.` is not kept. Light sleep (`sleep`) does not dim it.
 - Power: a short press of the power key requests an orderly shutdown; holding
   it makes the controller cut power outright. `shutdown` stops everything,
   flushes storage, and asks the controller to remove power after six seconds.
 - Wake: there is no interrupt line from the controller to the module, so a key
-  press cannot wake the system from sleep.
+  press cannot wake the system from sleep; KEY (the module's BOOT button)
+  does. The idle timeout (`power idle`, 60 seconds in the `lowpower` profile)
+  therefore suspends the screen instead of sleeping, as `suspend` does. KEY
+  or a keypress resumes it, and the keypress is then handled as usual, so
+  Enter also runs the command line. Shift, Ctrl, Alt or Caps Lock alone and
+  the controller's own Alt shortcuts do not resume it.
 - Storage: the microSD slot (`storage0`) is used in one-bit SDMMC mode on
   CLK1/CMD2/DAT0=42. DAT1 and DAT2 are not wired on the mainboard, so one bit is
   the maximum in any mode. GPIO41 (CD/DAT3) is driven high at boot so the card

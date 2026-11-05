@@ -312,9 +312,9 @@ job for periodic polling.
 | `deepsleep` | `deepsleep` | Turn off the ESP32 radios and enter deep sleep. KEY, an armed RTC or scheduled timer, or RESET starts a fresh boot. |
 | `shutdown` | `shutdown` | Stop apps and jobs, flush storage, and power down. Only the physical power/KEY button, RESET, or a power cycle starts a fresh boot. |
 | `suspend` | `suspend` | Turn off the primary display and temporarily use the `lowpower` profile while services and jobs continue. Press KEY or a keyboard key to resume. |
-| `power` | `power [status]` | Show the selected and effective profiles, suspend state, sleep policy, and wake statistics. |
+| `power` | `power [status]` | Show the selected and effective profiles, suspend state, sleep and idle policy, and wake statistics. |
 | `power` | `power profile [performance\|balanced\|battery\|lowpower]` | Show or save the power profile. |
-| `power` | `power idle [off\|seconds]` | Show or configure the display-shell idle light-sleep timeout. |
+| `power` | `power idle [off\|seconds]` | Show or configure the display-shell idle timeout and show what it does: light sleep, or suspend on the Clockwork PicoCalc. |
 | `power` | `power key [short\|long] [action]` | Show or configure the dedicated KEY short- and long-press actions. |
 | `power` | `power sleep` | Enter explicit light sleep from the display shell. Press KEY to wake. |
 | `power` | `power suspend` | Turn off the primary display while services and jobs continue. Press KEY or a keyboard key to resume. |
@@ -466,7 +466,7 @@ Profiles:
 | `performance` | CPU fixed at 240 MHz, no automatic light sleep. This is the default. |
 | `balanced` | CPU fixed at 160 MHz, no automatic light sleep. |
 | `battery` | CPU fixed at 160 MHz with ESP-IDF automatic light sleep. |
-| `lowpower` | CPU fixed at 80 MHz with automatic light sleep and display-shell idle sleep after 60 seconds. |
+| `lowpower` | CPU fixed at 80 MHz with automatic light sleep and the display-shell idle timeout after 60 seconds. |
 
 Suspend is different from explicit light sleep. It keeps the runtime, radios,
 background jobs, Inbox notifications, and audio active while the primary
@@ -476,6 +476,13 @@ a new keypress from a built-in or attached keyboard, or a BLE keyboard reconnect
 resumes the display and restores the selected profile. Releasing a held key or
 automatic key repeat does not resume the display. `power status` shows
 the selected profile, effective profile, and suspend state.
+
+When the idle timeout expires at the display shell, SolarOS enters explicit
+light sleep. On the Clockwork PicoCalc, whose keyboard cannot wake light sleep,
+it suspends instead, so a keypress resumes as after `suspend`; `power status`
+shows this as `Idle action: suspend`. The timeout does not fire again while
+suspended and restarts on resume. `sleep`, `power sleep` and a KEY action of
+`sleep` still enter light sleep.
 
 `power key` is an alias for the KEY settings exposed by `setterm powerkey`.
 Without `short` or `long`, an action changes the short press for compatibility.
