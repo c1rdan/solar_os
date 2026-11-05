@@ -1709,8 +1709,8 @@ Current state (staged bring-up):
   boot the driver checks the chip's address lines and a few test patterns
   before formatting; if the chip does not answer or a check fails, `/psram` is
   not mounted and the rest of the system starts normally. The whole chip has
-  been verified at 40 MHz, the most the ESP32-S3 GPIO matrix allows, so 32 MHz
-  leaves margin. The SPI3 host and GPIO4, 5 and 13 to 16 belong to it.
+  been verified at 40 MHz, the fastest clock tested, so 32 MHz leaves margin.
+  The SPI3 host and GPIO4, 5 and 13 to 16 belong to it.
 - Audio: `audio0` plays 16-bit PCM in stereo through two LEDC PWM outputs
   (left GPIO7, right GPIO8) at 16 kHz with 8-bit resolution on a 78 kHz
   carrier; the mainboard's RC filter and amplifier turn them into line level.
