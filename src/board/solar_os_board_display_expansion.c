@@ -2,8 +2,11 @@
 
 #include <string.h>
 
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+
+static const char *TAG = "board-display";
 
 static solar_os_board_display_t *primary_display;
 static portMUX_TYPE primary_display_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -17,6 +20,8 @@ static SemaphoreHandle_t brightness_mutex;
 static solar_os_board_display_brightness_fn_t brightness_provider;
 static void *brightness_provider_user;
 static uint8_t brightness_requested = 100U;
+/* The panel is in power save: a provider is held at its lowest level. */
+static bool brightness_power_save;
 
 static SemaphoreHandle_t brightness_mutex_get(void)
 {
@@ -51,7 +56,7 @@ esp_err_t solar_os_board_display_set_brightness_provider(
         brightness_provider = set;
         brightness_provider_user = user;
     }
-    const uint8_t percent = brightness_requested;
+    const uint8_t percent = brightness_power_save ? 0U : brightness_requested;
     portEXIT_CRITICAL(&brightness_lock);
     esp_err_t err = taken ? ESP_ERR_INVALID_STATE : set(user, percent);
     xSemaphoreGive(mutex);
@@ -143,9 +148,33 @@ esp_err_t solar_os_board_display_set_power_save(solar_os_board_display_t *displa
 {
     if (display == NULL || display->u8g2 == NULL || display->ops == NULL)
         return ESP_ERR_INVALID_STATE;
+    esp_err_t err = ESP_OK;
     if (display->ops->set_power_save != NULL)
-        return display->ops->set_power_save(display, enabled);
-    u8g2_SetPowerSave(display->u8g2, enabled ? 1 : 0);
+        err = display->ops->set_power_save(display, enabled);
+    else
+        u8g2_SetPowerSave(display->u8g2, enabled ? 1 : 0);
+    if (err != ESP_OK)
+        return err;
+
+    /* The panel driver only switches a backlight pin it owns. A provider
+     * backlight drops to its lowest level while the panel sleeps and gets the
+     * requested level back on wake. Like a pin backlight, a failure here does
+     * not fail the panel transition. */
+    SemaphoreHandle_t mutex = brightness_mutex_get();
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&brightness_lock);
+    brightness_power_save = enabled;
+    solar_os_board_display_brightness_fn_t provider = brightness_provider;
+    void *user = brightness_provider_user;
+    const uint8_t percent = enabled ? 0U : brightness_requested;
+    portEXIT_CRITICAL(&brightness_lock);
+    if (provider != NULL) {
+        const esp_err_t backlight_err = provider(user, percent);
+        if (backlight_err != ESP_OK)
+            ESP_LOGW(TAG, "backlight %s failed: %s", enabled ? "dim" : "restore",
+                     esp_err_to_name(backlight_err));
+    }
+    xSemaphoreGive(mutex);
     return ESP_OK;
 }
 
@@ -250,10 +279,12 @@ esp_err_t solar_os_board_display_set_brightness(solar_os_board_display_t *displa
     portENTER_CRITICAL(&brightness_lock);
     solar_os_board_display_brightness_fn_t provider = brightness_provider;
     void *user = brightness_provider_user;
+    const bool power_save = brightness_power_save;
     portEXIT_CRITICAL(&brightness_lock);
     esp_err_t err;
     if (provider != NULL) {
-        err = provider(user, percent);
+        /* While the panel sleeps the level waits for wake. */
+        err = power_save ? ESP_OK : provider(user, percent);
     } else {
         err = display->ops != NULL && display->ops->set_brightness != NULL ?
             display->ops->set_brightness(display, percent) : ESP_ERR_NOT_SUPPORTED;

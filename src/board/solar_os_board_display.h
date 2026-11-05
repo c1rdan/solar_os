@@ -100,7 +100,12 @@ esp_err_t solar_os_board_display_set_brightness(solar_os_board_display_t *displa
  *
  * The last requested level is remembered even while no provider is bound, and
  * is applied as soon as one binds: the display service restores the saved
- * brightness at start-up, before such a controller has attached. */
+ * brightness at start-up, before such a controller has attached.
+ *
+ * While solar_os_board_display_set_power_save holds the panel in power save,
+ * the provider is held at 0 percent, its lowest level. Requests in that time
+ * are remembered and applied on wake, and a provider that binds then starts
+ * at 0. */
 typedef esp_err_t (*solar_os_board_display_brightness_fn_t)(void *user, uint8_t percent);
 esp_err_t solar_os_board_display_set_brightness_provider(
     solar_os_board_display_brightness_fn_t set, void *user);

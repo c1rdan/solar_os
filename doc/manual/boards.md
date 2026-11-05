@@ -1692,6 +1692,10 @@ Current state (staged bring-up):
 - Backlights: `setterm brightness` drives the LCD backlight and
   `setterm backlight` the keyboard backlight. The controller quantises both
   and never turns the LCD fully off (its lowest step is about 6 percent).
+  While the screen is off (`suspend`, deep sleep, shutdown) the LCD backlight
+  drops to that lowest step. Waking restores the `setterm brightness` level,
+  including one set while the screen was off; a change made with Alt+`,` or
+  Alt+`.` is not kept. Light sleep (`sleep` or idle sleep) does not dim it.
 - Power: a short press of the power key requests an orderly shutdown; holding
   it makes the controller cut power outright. `shutdown` stops everything,
   flushes storage, and asks the controller to remove power after six seconds.
