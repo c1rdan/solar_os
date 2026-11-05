@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "solar_os_input.h"
 #include "solar_os_keys.h"
@@ -462,6 +463,154 @@ static void test_voltage_estimate(void)
     }
 }
 
+static void test_any_down(void)
+{
+    solar_os_picocalc_keyboard_t kb;
+    solar_os_picocalc_keyboard_reset(&kb);
+    assert(!solar_os_picocalc_keyboard_any_down(NULL));
+    assert(!solar_os_picocalc_keyboard_any_down(&kb));
+
+    expect_press(&kb, 'a', 'a', 'a', 0U);
+    assert(solar_os_picocalc_keyboard_any_down(&kb));
+    expect_release(&kb, 'a', 'a', 'a', 0U);
+    assert(!solar_os_picocalc_keyboard_any_down(&kb));
+
+    /* A modifier on its own counts: the next key follows soon. */
+    expect_none(&kb, PRESSED, MOD_CTRL);
+    assert(solar_os_picocalc_keyboard_any_down(&kb));
+    expect_none(&kb, RELEASED, MOD_CTRL);
+    assert(!solar_os_picocalc_keyboard_any_down(&kb));
+
+    /* Sym, Caps Lock and the power key are not tracked. */
+    expect_none(&kb, PRESSED, MOD_SYM);
+    expect_none(&kb, PRESSED, 0xc1U);
+    solar_os_picocalc_key_transition_t t = {0};
+    assert(decode(&kb, PRESSED, 0x91U, &t) == SOLAR_OS_PICOCALC_KEY_POWER);
+    assert(!solar_os_picocalc_keyboard_any_down(&kb));
+}
+
+static void test_poll_defaults(void)
+{
+    solar_os_picocalc_poll_t poll;
+    memset(&poll, 0xff, sizeof(poll));
+    solar_os_picocalc_poll_defaults(&poll);
+    assert(poll.fast_ms == SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    assert(poll.idle_ms == SOLAR_OS_PICOCALC_POLL_IDLE_MS);
+    assert(poll.screen_off_ms == SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS);
+    assert(poll.linger_ms == SOLAR_OS_PICOCALC_POLL_LINGER_MS);
+    solar_os_picocalc_poll_defaults(NULL);
+
+    /* Fast is no slower than the old fixed 10 ms poll. The others are
+     * slower as less is going on, and well inside the controller's 2.5 s
+     * I2C timeout. The linger outlasts the controller's 300 ms hold delay,
+     * after which a held key is re-sent about every 100 ms. */
+    assert(poll.fast_ms <= 10U);
+    assert(poll.fast_ms < poll.idle_ms && poll.idle_ms < poll.screen_off_ms);
+    assert(poll.screen_off_ms <= SOLAR_OS_PICOCALC_POLL_MAX_MS);
+    assert(SOLAR_OS_PICOCALC_POLL_MAX_MS < 2500U);
+    assert(poll.linger_ms > 300U);
+    /* The first key after a pause: about 20 ms scan + idle + 5 ms exchange. */
+    assert(20U + poll.idle_ms + 5U < 100U);
+}
+
+static void test_poll_mode(void)
+{
+    solar_os_picocalc_poll_t poll;
+    solar_os_picocalc_poll_defaults(&poll);
+    const uint32_t linger = poll.linger_ms;
+
+    /* A key or modifier down is fast however long ago the last entry was. */
+    assert(solar_os_picocalc_poll_mode(&poll, true, 0U, false) == SOLAR_OS_PICOCALC_POLL_FAST);
+    assert(solar_os_picocalc_poll_mode(&poll, true, 60000U, false) == SOLAR_OS_PICOCALC_POLL_FAST);
+    assert(solar_os_picocalc_poll_mode(&poll, true, 60000U, true) == SOLAR_OS_PICOCALC_POLL_FAST);
+
+    /* Fast through the linger time after the last entry, then idle. */
+    assert(solar_os_picocalc_poll_mode(&poll, false, 0U, false) == SOLAR_OS_PICOCALC_POLL_FAST);
+    assert(solar_os_picocalc_poll_mode(&poll, false, linger - 1U, false) ==
+           SOLAR_OS_PICOCALC_POLL_FAST);
+    assert(solar_os_picocalc_poll_mode(&poll, false, linger, false) == SOLAR_OS_PICOCALC_POLL_IDLE);
+    assert(solar_os_picocalc_poll_mode(&poll, false, UINT32_MAX, false) ==
+           SOLAR_OS_PICOCALC_POLL_IDLE);
+
+    /* The screen being off only slows an otherwise idle keyboard. */
+    assert(solar_os_picocalc_poll_mode(&poll, false, linger - 1U, true) ==
+           SOLAR_OS_PICOCALC_POLL_FAST);
+    assert(solar_os_picocalc_poll_mode(&poll, false, linger, true) ==
+           SOLAR_OS_PICOCALC_POLL_SCREEN_OFF);
+
+    /* A zero linger leaves only held keys fast. */
+    poll.linger_ms = 0U;
+    assert(solar_os_picocalc_poll_mode(&poll, false, 0U, false) == SOLAR_OS_PICOCALC_POLL_IDLE);
+    assert(solar_os_picocalc_poll_mode(&poll, true, 0U, false) == SOLAR_OS_PICOCALC_POLL_FAST);
+
+    assert(solar_os_picocalc_poll_mode(NULL, false, 60000U, true) == SOLAR_OS_PICOCALC_POLL_FAST);
+}
+
+static void test_poll_wait(void)
+{
+    solar_os_picocalc_poll_t poll;
+    solar_os_picocalc_poll_defaults(&poll);
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_FAST) ==
+           SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_IDLE) ==
+           SOLAR_OS_PICOCALC_POLL_IDLE_MS);
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_SCREEN_OFF) ==
+           SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS);
+
+    /* Overrides apply, within 1..POLL_MAX_MS. */
+    poll = (solar_os_picocalc_poll_t) {.fast_ms = 0U, .idle_ms = 250U, .screen_off_ms = 60000U};
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_FAST) == 1U);
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_IDLE) == 250U);
+    assert(solar_os_picocalc_poll_wait_ms(&poll, SOLAR_OS_PICOCALC_POLL_SCREEN_OFF) ==
+           SOLAR_OS_PICOCALC_POLL_MAX_MS);
+
+    assert(solar_os_picocalc_poll_wait_ms(NULL, SOLAR_OS_PICOCALC_POLL_IDLE) ==
+           SOLAR_OS_PICOCALC_POLL_FAST_MS);
+}
+
+/* Feed a FIFO sequence through the decoder and the poll policy together, the
+ * way the worker does, and check the wait it would choose after each entry. */
+static void test_poll_follows_keys(void)
+{
+    solar_os_picocalc_keyboard_t kb;
+    solar_os_picocalc_poll_t poll;
+    solar_os_picocalc_keyboard_reset(&kb);
+    solar_os_picocalc_poll_defaults(&poll);
+    const uint32_t linger = poll.linger_ms;
+
+#define WAIT_AFTER(since, screen_off)                                                    \
+    solar_os_picocalc_poll_wait_ms(&poll, solar_os_picocalc_poll_mode(                   \
+        &poll, solar_os_picocalc_keyboard_any_down(&kb), (since), (screen_off)))
+
+    assert(WAIT_AFTER(linger, false) == SOLAR_OS_PICOCALC_POLL_IDLE_MS);
+    assert(WAIT_AFTER(linger, true) == SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS);
+
+    /* Ctrl held for a long time before C: still fast when C comes. */
+    expect_none(&kb, PRESSED, MOD_CTRL);
+    assert(WAIT_AFTER(5U * linger, false) == SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    expect_press(&kb, 'c', 'c', 'c', SOLAR_OS_INPUT_MOD_LEFT_CTRL);
+    expect_none(&kb, RELEASED, MOD_CTRL);
+    /* C still held: its release must be seen quickly. */
+    assert(WAIT_AFTER(5U * linger, false) == SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    expect_release(&kb, 'c', 'c', 'c', SOLAR_OS_INPUT_MOD_LEFT_CTRL);
+    assert(WAIT_AFTER(0U, false) == SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    assert(WAIT_AFTER(linger, false) == SOLAR_OS_PICOCALC_POLL_IDLE_MS);
+
+    /* A held arrow key, re-sent by the controller as HOLD. */
+    expect_press(&kb, 0xb5U, 0xb5U, SOLAR_OS_KEY_UP, 0U);
+    expect_none(&kb, HOLD, 0xb5U);
+    assert(WAIT_AFTER(5U * linger, true) == SOLAR_OS_PICOCALC_POLL_FAST_MS);
+    expect_release(&kb, 0xb5U, 0xb5U, SOLAR_OS_KEY_UP, 0U);
+    assert(WAIT_AFTER(linger, true) == SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS);
+
+    /* Losing the controller resets the decoder, so polling slows again. */
+    expect_press(&kb, 'q', 'q', 'q', 0U);
+    expect_none(&kb, PRESSED, MOD_ALT);
+    solar_os_picocalc_keyboard_reset(&kb);
+    assert(WAIT_AFTER(linger, false) == SOLAR_OS_PICOCALC_POLL_IDLE_MS);
+#undef WAIT_AFTER
+}
+
 int main(void)
 {
     test_fifo_empty();
@@ -481,6 +630,11 @@ int main(void)
     test_battery_register();
     test_battery_wrong_register();
     test_voltage_estimate();
+    test_any_down();
+    test_poll_defaults();
+    test_poll_mode();
+    test_poll_wait();
+    test_poll_follows_keys();
     puts("picocalc_codec_test: ok");
     return 0;
 }

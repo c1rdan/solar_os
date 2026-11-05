@@ -269,6 +269,55 @@ bool solar_os_picocalc_keyboard_pop_down(
     return true;
 }
 
+bool solar_os_picocalc_keyboard_any_down(const solar_os_picocalc_keyboard_t *keyboard)
+{
+    return keyboard != NULL && (keyboard->down_count > 0U || keyboard->held_modifiers != 0U);
+}
+
+void solar_os_picocalc_poll_defaults(solar_os_picocalc_poll_t *poll)
+{
+    if (poll != NULL) {
+        *poll = (solar_os_picocalc_poll_t) {
+            .fast_ms = SOLAR_OS_PICOCALC_POLL_FAST_MS,
+            .idle_ms = SOLAR_OS_PICOCALC_POLL_IDLE_MS,
+            .screen_off_ms = SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS,
+            .linger_ms = SOLAR_OS_PICOCALC_POLL_LINGER_MS,
+        };
+    }
+}
+
+solar_os_picocalc_poll_mode_t solar_os_picocalc_poll_mode(const solar_os_picocalc_poll_t *poll,
+                                                          bool keys_down,
+                                                          uint32_t since_entry_ms,
+                                                          bool screen_off)
+{
+    if (poll == NULL || keys_down || since_entry_ms < poll->linger_ms) {
+        return SOLAR_OS_PICOCALC_POLL_FAST;
+    }
+    return screen_off ? SOLAR_OS_PICOCALC_POLL_SCREEN_OFF : SOLAR_OS_PICOCALC_POLL_IDLE;
+}
+
+uint32_t solar_os_picocalc_poll_wait_ms(const solar_os_picocalc_poll_t *poll,
+                                        solar_os_picocalc_poll_mode_t mode)
+{
+    uint32_t wait_ms;
+    if (poll == NULL) {
+        return SOLAR_OS_PICOCALC_POLL_FAST_MS;
+    }
+    switch (mode) {
+    case SOLAR_OS_PICOCALC_POLL_IDLE: wait_ms = poll->idle_ms; break;
+    case SOLAR_OS_PICOCALC_POLL_SCREEN_OFF: wait_ms = poll->screen_off_ms; break;
+    case SOLAR_OS_PICOCALC_POLL_FAST:
+    default: wait_ms = poll->fast_ms; break;
+    }
+    /* Never spin on the bus, and never wait so long that the controller
+     * resets its I2C peripheral. */
+    if (wait_ms == 0U) {
+        return 1U;
+    }
+    return wait_ms < SOLAR_OS_PICOCALC_POLL_MAX_MS ? wait_ms : SOLAR_OS_PICOCALC_POLL_MAX_MS;
+}
+
 #define LCD_REG_MIN 16U
 #define LCD_REG_MAX 240U
 #define KBD_REG_STEP 32U

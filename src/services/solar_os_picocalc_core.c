@@ -12,6 +12,7 @@
 #include "solar_os_battery.h"
 #include "solar_os_board_caps.h"
 #include "solar_os_buses.h"
+#include "solar_os_display.h"
 #include "solar_os_input.h"
 #include "solar_os_picocalc_codec.h"
 #include "solar_os_power.h"
@@ -22,9 +23,6 @@
 #include "solar_os_board_display.h"
 #endif
 
-/* Idle wait between FIFO polls. Each poll already costs the register gap plus
- * two I2C transfers at 10 kHz, so this only paces an empty queue. */
-#define PICOCALC_CORE_IDLE_MS 10U
 #define PICOCALC_CORE_DRAIN_MAX 16U
 #define PICOCALC_CORE_TASK_STACK 3072U
 #define PICOCALC_CORE_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
@@ -57,9 +55,13 @@ typedef struct {
      * worker, the backlight callbacks and power-off must never interleave. */
     StaticSemaphore_t bus_mutex_storage;
     SemaphoreHandle_t bus_mutex;
+    /* Poll intervals; see solar_os_picocalc_codec.h. */
+    solar_os_picocalc_poll_t poll;
     /* Worker-only state. */
     unsigned consecutive_errors;
     bool responding;
+    /* When the FIFO last returned an entry. */
+    TickType_t last_entry;
     /* Cached battery reading, shared with the battery provider callback. */
     portMUX_TYPE battery_lock;
     solar_os_picocalc_battery_t battery;
@@ -290,10 +292,24 @@ static void log_version(picocalc_core_device_t *device)
     }
 }
 
+static uint32_t poll_wait_ms(const picocalc_core_device_t *device)
+{
+    const uint32_t since_entry_ms =
+        (uint32_t)((xTaskGetTickCount() - device->last_entry) * portTICK_PERIOD_MS);
+    const solar_os_picocalc_poll_mode_t mode = solar_os_picocalc_poll_mode(
+        &device->poll,
+        solar_os_picocalc_keyboard_any_down(&device->keyboard),
+        since_entry_ms,
+        solar_os_display_primary_suspended());
+    return solar_os_picocalc_poll_wait_ms(&device->poll, mode);
+}
+
 static void worker(void *arg)
 {
     picocalc_core_device_t *device = arg;
     TickType_t last_battery = xTaskGetTickCount() - pdMS_TO_TICKS(PICOCALC_CORE_BATTERY_REFRESH_MS);
+    /* Start fast: the first keys may already be queued. */
+    device->last_entry = xTaskGetTickCount();
 
     while (!device->stop_requested) {
         bool activity = false;
@@ -315,6 +331,7 @@ static void worker(void *arg)
                 break;
             }
             activity = true;
+            device->last_entry = xTaskGetTickCount();
             publish_entry(device, entry[0], entry[1]);
         }
 
@@ -340,7 +357,7 @@ static void worker(void *arg)
         }
 
         if (!activity && err == ESP_OK) {
-            (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(PICOCALC_CORE_IDLE_MS));
+            (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(poll_wait_ms(device)));
         }
     }
 
@@ -413,6 +430,7 @@ esp_err_t solar_os_picocalc_core_attach(
     core.active = true;
     core.address = address;
     core.gap_ms = gap_ms;
+    solar_os_picocalc_poll_defaults(&core.poll);
     strlcpy(core.name, name, sizeof(core.name));
     strlcpy(core.i2c_bus, i2c_bus, sizeof(core.i2c_bus));
     core.bus_mutex = xSemaphoreCreateMutexStatic(&core.bus_mutex_storage);
@@ -469,8 +487,10 @@ esp_err_t solar_os_picocalc_core_attach(
         ESP_LOGW(TAG, "LCD backlight not bound: %s", esp_err_to_name(err));
     }
 #endif
-    ESP_LOGI(TAG, "%s attached on %s address 0x%02x (register gap %u ms) as %s and %s",
-             name, i2c_bus, address, (unsigned)gap_ms,
+    ESP_LOGI(TAG, "%s attached on %s address 0x%02x (register gap %u ms, poll %u/%u/%u ms) "
+             "as %s and %s",
+             name, i2c_bus, address, (unsigned)gap_ms, (unsigned)core.poll.fast_ms,
+             (unsigned)core.poll.idle_ms, (unsigned)core.poll.screen_off_ms,
              PICOCALC_CORE_KEYBOARD_NAME, PICOCALC_CORE_BATTERY_NAME);
     return ESP_OK;
 }

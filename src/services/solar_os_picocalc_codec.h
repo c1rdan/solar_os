@@ -89,6 +89,54 @@ bool solar_os_picocalc_keyboard_pop_down(
     solar_os_picocalc_keyboard_t *keyboard,
     solar_os_picocalc_key_transition_t *transition);
 
+/* True while any key or modifier is tracked as down. */
+bool solar_os_picocalc_keyboard_any_down(const solar_os_picocalc_keyboard_t *keyboard);
+
+/* Key FIFO polling. The controller has no interrupt line, so the host polls,
+ * and each poll keeps the CPU out of light sleep for the whole transfer.
+ *
+ *  - Fast while a key or modifier is down, so a held key's release is seen
+ *    within one of the input service's repeats (15 per second by default),
+ *    and for the linger time after any FIFO entry, so typing stays fast.
+ *  - Idle otherwise. The controller scans about every 20 ms, so the first
+ *    key after a pause is read within about 20 ms + idle + one exchange.
+ *  - Slower while the screen is off, where the key that wakes it waits for
+ *    the panel to restart anyway.
+ *
+ * The controller queues 31 entries, far more than one wait can fill, so a
+ * slow poll only delays keys. It resets its I2C peripheral after 2.5 s
+ * without traffic, so no interval may come near that. */
+#define SOLAR_OS_PICOCALC_POLL_FAST_MS 10U
+#define SOLAR_OS_PICOCALC_POLL_IDLE_MS 40U
+#define SOLAR_OS_PICOCALC_POLL_SCREEN_OFF_MS 100U
+#define SOLAR_OS_PICOCALC_POLL_LINGER_MS 1000U
+#define SOLAR_OS_PICOCALC_POLL_MAX_MS 1000U
+
+typedef struct {
+    uint16_t fast_ms;
+    uint16_t idle_ms;
+    uint16_t screen_off_ms;
+    uint16_t linger_ms;
+} solar_os_picocalc_poll_t;
+
+typedef enum {
+    SOLAR_OS_PICOCALC_POLL_FAST,
+    SOLAR_OS_PICOCALC_POLL_IDLE,
+    SOLAR_OS_PICOCALC_POLL_SCREEN_OFF,
+} solar_os_picocalc_poll_mode_t;
+
+void solar_os_picocalc_poll_defaults(solar_os_picocalc_poll_t *poll);
+
+/* since_entry_ms is the time since the last non-empty FIFO read. */
+solar_os_picocalc_poll_mode_t solar_os_picocalc_poll_mode(const solar_os_picocalc_poll_t *poll,
+                                                          bool keys_down,
+                                                          uint32_t since_entry_ms,
+                                                          bool screen_off);
+
+/* The wait before the next poll in a mode, kept within 1..POLL_MAX_MS. */
+uint32_t solar_os_picocalc_poll_wait_ms(const solar_os_picocalc_poll_t *poll,
+                                        solar_os_picocalc_poll_mode_t mode);
+
 /* Controller registers (write: register | 0x80, then the value; read: write
  * the register, wait, read two bytes). */
 #define SOLAR_OS_PICOCALC_REG_VERSION 0x01U

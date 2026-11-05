@@ -1685,6 +1685,11 @@ Current state (staged bring-up):
   to F10. Insert is not supported. Held keys repeat at the SolarOS repeat
   rate, not the controller's. Alt+`,` and Alt+`.` change the LCD backlight and
   Alt+Space cycles the keyboard backlight inside the controller itself.
+- Key polling: the controller has no interrupt line, so its key queue is
+  polled every 10 ms while a key is down and for a second after the last one,
+  every 40 ms otherwise, and every 100 ms while the screen is off. The first
+  key after a pause can take up to about 70 ms to arrive, including the
+  controller's own 20 ms keyboard scan.
 - Battery: the controller reports the charge percentage and whether it is
   charging, but no voltage, so the voltage `battery` shows is an estimate
   derived from the percentage. The first reading can be inaccurate until a
