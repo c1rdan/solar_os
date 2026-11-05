@@ -73,6 +73,10 @@ void solar_os_picocalc_keyboard_reset(solar_os_picocalc_keyboard_t *keyboard);
 /* A FIFO read of {0, 0} means the controller's queue is empty. */
 bool solar_os_picocalc_keyboard_fifo_empty(uint8_t state, uint8_t code);
 
+/* False for a FIFO read the controller never sends: a state above 3, or state
+ * 0 with a key code. Such a reply answers some other register. */
+bool solar_os_picocalc_keyboard_fifo_valid(uint8_t state, uint8_t code);
+
 solar_os_picocalc_key_result_t solar_os_picocalc_keyboard_decode(
     solar_os_picocalc_keyboard_t *keyboard,
     uint8_t state,
@@ -113,8 +117,11 @@ typedef struct {
 } solar_os_picocalc_battery_t;
 
 /* Decode the two bytes read from the battery register: {register, value} with
- * the percentage in bits 0..6 and the charging flag in bit 7. */
-solar_os_picocalc_battery_t solar_os_picocalc_decode_battery(const uint8_t data[2]);
+ * the percentage in bits 0..6 and the charging flag in bit 7. Returns false and
+ * leaves *battery unchanged when the first byte is not the battery register:
+ * the reply answers some other register. */
+bool solar_os_picocalc_decode_battery(const uint8_t data[2],
+                                      solar_os_picocalc_battery_t *battery);
 
 /* The controller reports no voltage. Estimate one linearly from the
  * percentage over the battery service's configured empty..full range, so the

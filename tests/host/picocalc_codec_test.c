@@ -77,6 +77,25 @@ static void test_fifo_empty(void)
     expect_none(&kb, PRESSED, 0U);
 }
 
+static void test_fifo_valid(void)
+{
+    assert(solar_os_picocalc_keyboard_fifo_valid(0U, 0U));
+    assert(solar_os_picocalc_keyboard_fifo_valid(PRESSED, 'a'));
+    assert(solar_os_picocalc_keyboard_fifo_valid(HOLD, 0x82U));
+    assert(solar_os_picocalc_keyboard_fifo_valid(RELEASED, 'a'));
+
+    /* Replies to other registers: the version {0, 0x16}, the battery, both
+     * backlights and the power-off register echo a register number or carry a
+     * value with state 0. */
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0U, 0x16U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(4U, 0U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0x05U, 0x50U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0x0aU, 0x40U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0x0bU, 0x55U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0x0eU, 1U));
+    assert(!solar_os_picocalc_keyboard_fifo_valid(0xffU, 0xffU));
+}
+
 static void test_plain_key_and_repeats(void)
 {
     solar_os_picocalc_keyboard_t kb;
@@ -383,29 +402,45 @@ static void test_keyboard_backlight_register(void)
 
 static void test_battery_register(void)
 {
+    solar_os_picocalc_battery_t battery = {0};
     const uint8_t none[2] = {0x0bU, 0x00U};
-    solar_os_picocalc_battery_t battery = solar_os_picocalc_decode_battery(none);
+    assert(solar_os_picocalc_decode_battery(none, &battery));
     assert(!battery.valid && !battery.charging && battery.percent == 0U);
 
     const uint8_t discharging[2] = {0x0bU, 0x55U};
-    battery = solar_os_picocalc_decode_battery(discharging);
+    assert(solar_os_picocalc_decode_battery(discharging, &battery));
     assert(battery.valid && !battery.charging && battery.percent == 85U);
 
     const uint8_t charging[2] = {0x0bU, (uint8_t)(0x80U | 85U)};
-    battery = solar_os_picocalc_decode_battery(charging);
+    assert(solar_os_picocalc_decode_battery(charging, &battery));
     assert(battery.valid && battery.charging && battery.percent == 85U);
 
     /* Charging at an empty gauge is still a real reading. */
     const uint8_t empty_charging[2] = {0x0bU, 0x80U};
-    battery = solar_os_picocalc_decode_battery(empty_charging);
+    assert(solar_os_picocalc_decode_battery(empty_charging, &battery));
     assert(battery.valid && battery.charging && battery.percent == 0U);
 
     const uint8_t garbage[2] = {0x0bU, 0x7fU};
-    battery = solar_os_picocalc_decode_battery(garbage);
+    assert(solar_os_picocalc_decode_battery(garbage, &battery));
     assert(battery.valid && battery.percent == 100U);
 
-    battery = solar_os_picocalc_decode_battery(NULL);
-    assert(!battery.valid);
+    assert(!solar_os_picocalc_decode_battery(NULL, &battery));
+    assert(!solar_os_picocalc_decode_battery(discharging, NULL));
+}
+
+static void test_battery_wrong_register(void)
+{
+    /* A reply to another register must not replace the last reading: a key
+     * entry {1, 'a'} would otherwise read as 97 percent. */
+    static const uint8_t replies[][2] = {
+        {0x01U, 'a'}, {0x03U, 'a'}, {0x00U, 0x16U}, {0x00U, 0x00U},
+        {0x05U, 0x50U}, {0x0aU, 0x40U}, {0x0eU, 0x01U}, {0x8bU, 0x55U},
+    };
+    for (unsigned i = 0; i < sizeof(replies) / sizeof(replies[0]); i++) {
+        solar_os_picocalc_battery_t battery = {.valid = true, .percent = 42U, .charging = true};
+        assert(!solar_os_picocalc_decode_battery(replies[i], &battery));
+        assert(battery.valid && battery.percent == 42U && battery.charging);
+    }
 }
 
 static void test_voltage_estimate(void)
@@ -430,6 +465,7 @@ static void test_voltage_estimate(void)
 int main(void)
 {
     test_fifo_empty();
+    test_fifo_valid();
     test_plain_key_and_repeats();
     test_release_after_case_change();
     test_symbol_identities();
@@ -443,6 +479,7 @@ int main(void)
     test_lcd_backlight_register();
     test_keyboard_backlight_register();
     test_battery_register();
+    test_battery_wrong_register();
     test_voltage_estimate();
     puts("picocalc_codec_test: ok");
     return 0;

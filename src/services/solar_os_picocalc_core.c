@@ -67,6 +67,10 @@ typedef struct {
     uint32_t unsupported;
     uint32_t dropped;
     uint32_t bus_errors;
+    /* Replies that answer some other register. */
+    uint32_t protocol_errors;
+    /* Reads repeated after a failed read. */
+    uint32_t read_retries;
 } picocalc_core_device_t;
 
 static const char *TAG = "picocalc-core";
@@ -138,8 +142,17 @@ static esp_err_t read_register(picocalc_core_device_t *device,
     ESP_RETURN_ON_ERROR(lock_bus(device), TAG, "bus busy");
     esp_err_t err = solar_os_bus_i2c_transmit(device->i2c_bus, device->address, &reg, 1U);
     if (err == ESP_OK) {
-        vTaskDelay(pdMS_TO_TICKS(device->gap_ms));
+        if (device->gap_ms > 0U) {
+            vTaskDelay(pdMS_TO_TICKS(device->gap_ms));
+        }
         err = solar_os_bus_i2c_receive(device->i2c_bus, device->address, data, 2U);
+        if (err != ESP_OK) {
+            /* The controller keeps its reply until the next write, so read it
+             * again without writing: a second FIFO write would dequeue the
+             * next entry and lose this one. */
+            device->read_retries++;
+            err = solar_os_bus_i2c_receive(device->i2c_bus, device->address, data, 2U);
+        }
     }
     xSemaphoreGive(device->bus_mutex);
     return err;
@@ -220,7 +233,12 @@ static void refresh_battery(picocalc_core_device_t *device)
     if (read_register(device, SOLAR_OS_PICOCALC_REG_BATTERY, data) != ESP_OK) {
         return;
     }
-    const solar_os_picocalc_battery_t battery = solar_os_picocalc_decode_battery(data);
+    solar_os_picocalc_battery_t battery = {0};
+    if (!solar_os_picocalc_decode_battery(data, &battery)) {
+        /* Not a battery reply: keep the last reading. */
+        device->protocol_errors++;
+        return;
+    }
     portENTER_CRITICAL(&device->battery_lock);
     device->battery = battery;
     portEXIT_CRITICAL(&device->battery_lock);
@@ -285,6 +303,12 @@ static void worker(void *arg)
             uint8_t entry[2] = {0};
             err = read_register(device, SOLAR_OS_PICOCALC_REG_FIFO, entry);
             if (err != ESP_OK) {
+                break;
+            }
+            if (!solar_os_picocalc_keyboard_fifo_valid(entry[0], entry[1])) {
+                /* A reply to some other register: count it and leave the rest
+                 * of the queue to the next poll. */
+                device->protocol_errors++;
                 break;
             }
             if (solar_os_picocalc_keyboard_fifo_empty(entry[0], entry[1])) {
@@ -469,12 +493,15 @@ esp_err_t solar_os_picocalc_core_detach(const char *name)
                         TAG, "battery provider unregister failed");
 
     ESP_LOGI(TAG,
-             "%s detached: %lu transitions, %lu unsupported, %lu dropped, %lu bus errors",
+             "%s detached: %lu transitions, %lu unsupported, %lu dropped, %lu bus errors, "
+             "%lu protocol errors, %lu read retries",
              name,
              (unsigned long)core.transitions,
              (unsigned long)core.unsupported,
              (unsigned long)core.dropped,
-             (unsigned long)core.bus_errors);
+             (unsigned long)core.bus_errors,
+             (unsigned long)core.protocol_errors,
+             (unsigned long)core.read_retries);
     clear_device(&core);
     return ESP_OK;
 }

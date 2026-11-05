@@ -163,6 +163,12 @@ bool solar_os_picocalc_keyboard_fifo_empty(uint8_t state, uint8_t code)
     return state == SOLAR_OS_PICOCALC_STATE_IDLE && code == 0U;
 }
 
+bool solar_os_picocalc_keyboard_fifo_valid(uint8_t state, uint8_t code)
+{
+    return state <= SOLAR_OS_PICOCALC_STATE_RELEASED &&
+        (state != SOLAR_OS_PICOCALC_STATE_IDLE || code == 0U);
+}
+
 solar_os_picocalc_key_result_t solar_os_picocalc_keyboard_decode(
     solar_os_picocalc_keyboard_t *keyboard,
     uint8_t state,
@@ -307,20 +313,20 @@ uint8_t solar_os_picocalc_kbd_register_from_percent(uint8_t percent)
     return (uint8_t)(steps * KBD_REG_STEP);
 }
 
-solar_os_picocalc_battery_t solar_os_picocalc_decode_battery(const uint8_t data[2])
+bool solar_os_picocalc_decode_battery(const uint8_t data[2],
+                                      solar_os_picocalc_battery_t *battery)
 {
-    solar_os_picocalc_battery_t battery = {0};
-    if (data == NULL) {
-        return battery;
+    if (data == NULL || battery == NULL || data[0] != SOLAR_OS_PICOCALC_REG_BATTERY) {
+        return false;
     }
     const uint8_t value = data[1];
-    battery.charging = (value & 0x80U) != 0U;
-    battery.percent = (uint8_t)(value & 0x7fU);
-    if (battery.percent > 100U) {
-        battery.percent = 100U;
+    battery->charging = (value & 0x80U) != 0U;
+    battery->percent = (uint8_t)(value & 0x7fU);
+    if (battery->percent > 100U) {
+        battery->percent = 100U;
     }
-    battery.valid = value != 0U;
-    return battery;
+    battery->valid = value != 0U;
+    return true;
 }
 
 uint16_t solar_os_picocalc_estimate_millivolts(uint8_t percent,
