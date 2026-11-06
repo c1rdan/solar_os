@@ -1306,7 +1306,7 @@ class FlavorPackagesTest(unittest.TestCase):
 
     def test_public_profiles_and_board_defaults(self):
         self.assertEqual({path.stem for path in (REPOSITORY / "flavors").glob("*.toml")},
-                         {"full", "classic", "writerdeck"})
+                         {"full", "classic", "writerdeck", "picocalc"})
         import configparser
         config = configparser.ConfigParser()
         config.read(REPOSITORY / "platformio.ini")
@@ -1323,6 +1323,25 @@ class FlavorPackagesTest(unittest.TestCase):
         for board in ("elecrow_crowpanel_esp32_s3_5_79_epaper",
                       "elecrow_crowpanel_esp32_s3_4_2_epaper"):
             self.assertEqual(config[f"env:{board}"]["custom_solaros_default_flavor"], "writerdeck")
+        self.assertEqual(
+            config["env:picocalc_esp32_s3_pico"]["custom_solaros_default_flavor"], "picocalc")
+
+    def test_picocalc_profile_fits_two_megabytes_of_psram(self):
+        name, _, groups, packages = self.resolve("picocalc")
+        self.assertEqual(name, "picocalc")
+        # The message store and chat gateway reserve about 800 KB of PSRAM at
+        # boot, so nothing that uses them is selected.
+        for package in ("service_messaging", "service_gateway", "app_chat", "service_irc",
+                        "service_sc2", "service_meshcore_common", "job_chatd"):
+            self.assertFalse(packages[package], package)
+        # Drivers for hardware the PicoCalc does not have are omitted.
+        for package in ("driver_camera_esp32", "driver_display_ili9341", "driver_gt911",
+                        "sx1262", "expansion_sdspi", "expansion_tdeck_keyboard"):
+            self.assertFalse(packages[package], package)
+        # The board's own drivers and the general applications stay.
+        for group in ("st7365p", "sdmmc", "psram_disk", "neopixel", "audio_pwm", "wifi",
+                      "bluetooth", "python", "lua", "playground", "writer", "web_browser"):
+            self.assertTrue(groups[group], group)
 
     def test_flavors_select_hardware_jobs_by_profile(self):
         for flavor in ("writerdeck", "full"):

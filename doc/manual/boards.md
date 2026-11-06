@@ -1757,9 +1757,16 @@ Current state (staged bring-up):
   UART) are free for GPIO, PWM and UART expansion. GPIO10, the Pico `ADC_VREF`
   pad, is never driven.
 
-The target defaults to the `full` flavor, which leaves about 90 KB of internal
-RAM free after boot. `SOLAR_OS_FLAVOR=writerdeck` builds the smaller
-`writerdeck` flavor, which leaves about 115 KB.
+The target defaults to its own `picocalc` flavor, because the module maps only
+2 MB of PSRAM. It is the `full` selection without chat, the chat gateway and
+server, IRC, SC2 and MeshCore, whose message stores reserve about 800 KB of
+PSRAM at boot, and without drivers for hardware the PicoCalc does not have,
+including the header add-ons (servo, motor, encoder, 1-Wire, GPIO keys, I2S
+audio). It leaves about 108 KB of internal RAM and 1.4 MB of PSRAM free after
+boot, enough for Python's 512 KB heap. Under `SOLAR_OS_FLAVOR=full` only about
+550 KB of PSRAM stays free and Python cannot start. `help update` does not fit
+in either flavor: it needs more than 1.3 MB of PSRAM to parse the manual
+catalog.
 
 ```sh
 pio run -e picocalc_esp32_s3_pico

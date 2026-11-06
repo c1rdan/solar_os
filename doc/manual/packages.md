@@ -134,13 +134,19 @@ are installed as [external foreground apps](native-app.md) through the module
 catalog and require native-module support in the firmware. They do not add
 firmware flavor groups.
 
-SolarOS provides three firmware profiles. `full` is the standard profile with
-the broad application and hardware-service selection. `classic` is a compact
+SolarOS provides three general firmware profiles and one board profile. `full`
+is the standard profile with the broad application and hardware-service
+selection. `classic` is a compact
 profile with ADC D-pad support for ODROID-GO, the I/O app, control bindings,
 and 1-Wire. It is the default for all classic ESP32 targets, including boards
 with 4 MiB flash.
 `writerdeck` is the compact profile used by e-paper boards with smaller
 application partitions.
+`picocalc` is the default for the Clockwork PicoCalc with an ESP32-S3-Pico,
+whose module maps only 2 MB of PSRAM. It is the `full` selection without chat,
+the chat gateway and server, IRC, SC2 and MeshCore, whose message stores
+reserve about 800 KB of PSRAM at boot, and without drivers for hardware the
+PicoCalc does not have.
 
 `classic` retains Python, Playground, writing, media, communications, and the
 selected board's required hardware drivers. Lua, built-in games, video playback,

@@ -1,0 +1,101 @@
+[flavor]
+name = "picocalc"
+description = "SolarOS for the Clockwork PicoCalc with an ESP32-S3-Pico: the full selection without drivers for absent hardware or the messaging services."
+
+# The ESP32-S3-Pico maps only 2 MB of PSRAM. Under `full`, the chat gateway and
+# message store reserve about 800 KB of it at boot, which leaves no block large
+# enough for the 512 KB Python heap. This profile therefore omits chat, the chat
+# gateway and server, IRC, SC2 and MeshCore, plus drivers for hardware the
+# PicoCalc does not have: other displays, touch, cameras, radios, GNSS, modems,
+# sensors, RTC and fuel-gauge chips, other keyboards and input devices, I2S
+# audio, SPI SD cards and header actuators (servo, motor, encoder, 1-Wire,
+# GPIO keys).
+
+[groups]
+hardware_shell = true
+filesystem = true
+wifi = true
+bluetooth = true
+sd_storage = true
+audio_support = true
+vision = true
+inference = true
+inference_backend = false
+zoo = true
+pipelines = true
+rtsp = true
+dlp = true
+jet = true
+input_keymap = true
+control_bindings = true
+controllers = true
+signal_processing = true
+vector_math = true
+gpio = true
+i2c = true
+spi = true
+uart = true
+adc = true
+pwm = true
+documentation_sync = true
+device_flasher = true
+logging = true
+battery_monitor = true
+embedded_docs = true
+serial_terminal = true
+editor = true
+pager = true
+files = true
+launcher = true
+io = true
+clock = true
+calculator = true
+plot = true
+sheet = true
+logic_analyzer = true
+sump = true
+bridge = true
+daq = true
+midi = true
+ssh = true
+http_client = true
+web_browser = true
+ftp = true
+telnet = true
+tcp_streams = true
+http_server = true
+display_server = true
+wireguard = true
+mqtt = true
+ntp = true
+slip = true
+ppp = true
+osc = true
+inbox = true
+contacts = true
+email = true
+agent = true
+espnow = true
+audio_commands = true
+speech = true
+player = true
+recorder = true
+synth = true
+function_generator = true
+webradio = true
+reader = true
+writer = true
+notes = true
+image_viewer = true
+vplay = true
+sketch = true
+invaders = true
+python = true
+lua = true
+playground = true
+dlp_client = true
+sdmmc = true
+psram_disk = true
+neopixel = true
+audio_pwm = true
+st7365p = true

@@ -129,6 +129,8 @@ pio device monitor -b 115200
 The standard flavor is `full`. All classic ESP32 targets default to `classic`:
 ODROID-GO, ESP32-DevKitC V4 WROVER, Freenove WROVER, and TTGO VGA32.
 E-paper HMI targets default to the compact `writerdeck` profile.
+The Clockwork PicoCalc defaults to its own `picocalc` profile, sized for its
+2 MB of PSRAM.
 Inference uses the downloadable ESP-DL library on supported targets.
 For a smaller image or an explicit override:
 
