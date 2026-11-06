@@ -41,6 +41,12 @@ CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
 CONFIG_ESP_WIFI_RX_BA_WIN=6
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=12
+# The RMT driver only sends the module LED's one-pixel frames, which fit in a
+# single RMT memory block, so its encoder and interrupt handlers can run from
+# flash. This frees about 9 KB of internal RAM.
+# CONFIG_RMT_ENCODER_FUNC_IN_IRAM is not set
+# CONFIG_RMT_TX_ISR_HANDLER_IN_IRAM is not set
+# CONFIG_RMT_RX_ISR_HANDLER_IN_IRAM is not set
 CONFIG_FATFS_VOLUME_COUNT=4
 CONFIG_LWIP_IP_FORWARD=y
 CONFIG_LWIP_IPV4_NAPT=y

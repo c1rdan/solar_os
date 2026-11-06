@@ -632,6 +632,11 @@ class BoardManifestTest(unittest.TestCase):
         # Light sleep is entered from IRAM, so IDF's first wake-up estimate
         # fits between key polls.
         self.assertIn("CONFIG_PM_SLP_IRAM_OPT=y", sdkconfig)
+        # The RMT driver only serves the one-pixel module LED, so its code
+        # stays in flash rather than internal RAM.
+        for option in ("RMT_ENCODER_FUNC_IN_IRAM", "RMT_TX_ISR_HANDLER_IN_IRAM",
+                       "RMT_RX_ISR_HANDLER_IN_IRAM"):
+            self.assertIn(f"# CONFIG_{option} is not set", sdkconfig)
         board_json = json.loads((ROOT / "boards/picocalc_esp32_s3_pico.json").read_text())
         self.assertEqual(board_json["build"]["psram_type"], "qspi")
         self.assertEqual(board_json["build"]["arduino"]["memory_type"], "qio_qspi")
