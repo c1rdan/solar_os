@@ -1078,10 +1078,15 @@ static esp_err_t ili9341_full_init(tft_ili9341_t *display) {
      * of 1.0 V, a reserved GVDD code and a gamma curve shifted by one byte,
      * which shows as bright horizontal bands on rows with detail over
      * near-white backgrounds. This sequence writes the ST7365P's own power-on
-     * values instead, with command set 2 unlocked around them. Entry mode
-     * copies each channel's MSB into the extra bit when RGB565 is widened to
-     * the panel's 18 bits, so white is full white. Inversion is applied by the
-     * common code below when invert_color is set. */
+     * values instead, with command set 2 unlocked around them, except for two
+     * values tuned on the panel by eye. At the datasheet VCOM of 1.0 V the
+     * screen edges show lighter than the centre on grey; 0.7 to 0.9 V is even,
+     * so VCOM sits at 0.8 V. The source equalizing time is 22.5 us instead of
+     * 16.5 us, which removes the faint remaining banding next to dense
+     * black-and-white detail. Entry mode copies each channel's MSB into the
+     * extra bit when RGB565 is widened to the panel's 18 bits, so white is full
+     * white. Inversion is applied by the common code below when invert_color
+     * is set. */
     const uint8_t enable_part1[] = {0xc3};
     const uint8_t enable_part2[] = {0x96};
     const uint8_t madctl[] = {display->config.madctl};
@@ -1093,10 +1098,10 @@ static esp_err_t ili9341_full_init(tft_ili9341_t *display) {
     const uint8_t power1[] = {0x80, 0x25};
     const uint8_t power2[] = {0x13};
     const uint8_t power3[] = {0xa5};
-    const uint8_t vcom[] = {0x1c};
+    const uint8_t vcom[] = {0x14};
     const uint8_t vcom_offset[] = {0x00};
     const uint8_t output_adjust[] = {
-        0x40, 0x8a, 0x00, 0x00, 0x25, 0x0a, 0x38, 0x33,
+        0x40, 0x8a, 0x00, 0x00, 0x29, 0x0a, 0x38, 0x33,
     };
     const uint8_t gamma[] = {
         0xf0, 0x03, 0x05, 0x09, 0x0c, 0x0f, 0x3e,

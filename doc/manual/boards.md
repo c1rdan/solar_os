@@ -1665,10 +1665,12 @@ Current state (staged bring-up):
   back over the panel's SDO line had no wrong pixel, so 40 MHz leaves a
   twofold margin (`SOLAR_OS_BOARD_DISPLAY_SPI_CLOCK_HZ` sets the clock). If
   red and blue are swapped, set `SOLAR_OS_BOARD_DISPLAY_MADCTL` to `0x48`. The
-  driver programs the controller's own power, VCOM and gamma values: the
-  ILI9488 sequence in the vendor firmware sets these registers wrongly on the
+  driver programs the controller's own power and gamma values: the ILI9488
+  sequence in the vendor firmware sets these registers wrongly on the
   ST7365P, which shows as bright bands on text rows over white or light grey
-  backgrounds.
+  backgrounds. VCOM is 0.8 V: at the datasheet's 1.0 V the screen edges show
+  lighter than the centre on grey. A longer source equalizing time removes
+  the last faint banding.
 - Keyboard, battery, backlights and power: the mainboard's STM32 controller
   (`core0`, I2C address 0x1f on a private 100 kHz bus) supplies `keyboard0`,
   `battery0`, both backlights and the system power-off. It only runs while the
