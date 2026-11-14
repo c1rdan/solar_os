@@ -116,6 +116,239 @@ esp_err_t solar_os_json_parse_cstr(const char *source, solar_os_json_doc_t **out
     return solar_os_json_parse(source, strlen(source), out_doc);
 }
 
+static const char *json_skip_space(const char *cursor, const char *end)
+{
+    while (cursor < end &&
+           (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' || *cursor == '\r')) {
+        cursor++;
+    }
+    return cursor;
+}
+
+/* Returns the end of the string that starts at cursor, or NULL. */
+static const char *json_skip_string(const char *cursor, const char *end)
+{
+    for (cursor++; cursor < end; cursor++) {
+        if (*cursor == '\\') {
+            if (++cursor == end) {
+                return NULL;
+            }
+        } else if (*cursor == '"') {
+            return cursor + 1;
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Returns the end of the value that starts at cursor, or NULL. Only finds the
+ * boundaries: the callers parse every byte they keep with cJSON, which checks
+ * the syntax.
+ */
+static const char *json_skip_value(const char *cursor, const char *end)
+{
+    if (cursor >= end) {
+        return NULL;
+    }
+    if (*cursor == '"') {
+        return json_skip_string(cursor, end);
+    }
+    if (*cursor != '{' && *cursor != '[') {
+        const char *start = cursor;
+        while (cursor < end && *cursor != ',' && *cursor != '}' && *cursor != ']' &&
+               *cursor != ' ' && *cursor != '\t' && *cursor != '\n' && *cursor != '\r') {
+            cursor++;
+        }
+        return cursor > start ? cursor : NULL;
+    }
+    size_t depth = 0;
+    while (cursor < end) {
+        if (*cursor == '"') {
+            cursor = json_skip_string(cursor, end);
+            if (cursor == NULL) {
+                return NULL;
+            }
+            continue;
+        }
+        if (*cursor == '{' || *cursor == '[') {
+            depth++;
+        } else if ((*cursor == '}' || *cursor == ']') && --depth == 0) {
+            return cursor + 1;
+        }
+        cursor++;
+    }
+    return NULL;
+}
+
+esp_err_t solar_os_json_parse_object_except_array(const char *source,
+                                                  size_t source_len,
+                                                  const char *array_key,
+                                                  solar_os_json_doc_t **out_doc,
+                                                  const char **array,
+                                                  size_t *array_len)
+{
+    if (out_doc == NULL || array == NULL || array_len == NULL ||
+        array_key == NULL || array_key[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *out_doc = NULL;
+    *array = NULL;
+    *array_len = 0;
+    if (source == NULL || source_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *end = source + source_len;
+    const char *cursor = json_skip_space(source, end);
+    if (cursor == end || *cursor != '{') {
+        return ESP_FAIL;
+    }
+    const size_t key_len = strlen(array_key);
+    const char *value = NULL;
+    const char *value_end = NULL;
+    cursor = json_skip_space(cursor + 1, end);
+    while (cursor < end && *cursor != '}') {
+        const char *key_end = *cursor == '"' ? json_skip_string(cursor, end) : NULL;
+        if (key_end == NULL) {
+            return ESP_FAIL;
+        }
+        const bool match = (size_t)(key_end - cursor) == key_len + 2 &&
+                           memcmp(cursor + 1, array_key, key_len) == 0;
+        cursor = json_skip_space(key_end, end);
+        if (cursor == end || *cursor != ':') {
+            return ESP_FAIL;
+        }
+        cursor = json_skip_space(cursor + 1, end);
+        const char *member_end = json_skip_value(cursor, end);
+        if (member_end == NULL) {
+            return ESP_FAIL;
+        }
+        if (match) {
+            if (value != NULL || *cursor != '[') {
+                return ESP_FAIL;
+            }
+            value = cursor;
+            value_end = member_end;
+        }
+        cursor = json_skip_space(member_end, end);
+        if (cursor < end && *cursor == ',') {
+            cursor = json_skip_space(cursor + 1, end);
+        }
+    }
+    if (value == NULL) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    /* Parse the object with an empty array in place of the large one. Any
+     * syntax error outside the array is still in this text; the elements are
+     * checked as solar_os_json_array_for_each() parses them. */
+    const size_t prefix_len = (size_t)(value - source);
+    const size_t suffix_len = (size_t)(end - value_end);
+    const size_t rest_len = prefix_len + 2 + suffix_len;
+    char *rest = json_malloc(rest_len + 1);
+    if (rest == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    memcpy(rest, source, prefix_len);
+    memcpy(rest + prefix_len, "[]", 2);
+    memcpy(rest + prefix_len + 2, value_end, suffix_len);
+    rest[rest_len] = '\0';
+    solar_os_json_doc_t *doc = NULL;
+    esp_err_t err = solar_os_json_parse(rest, rest_len, &doc);
+    json_free(rest);
+    if (err != ESP_OK) {
+        return err;
+    }
+    cJSON_DeleteItemFromObjectCaseSensitive(doc->root, array_key);
+    if (!cJSON_IsObject(doc->root) ||
+        cJSON_GetObjectItemCaseSensitive(doc->root, array_key) != NULL) {
+        /* A second spelling of the key, such as one with escapes. */
+        solar_os_json_free(doc);
+        return ESP_FAIL;
+    }
+    *out_doc = doc;
+    *array = value;
+    *array_len = (size_t)(value_end - value);
+    return ESP_OK;
+}
+
+esp_err_t solar_os_json_array_for_each(const char *array,
+                                       size_t array_len,
+                                       solar_os_json_element_fn visit,
+                                       void *user,
+                                       size_t *count)
+{
+    if (count != NULL) {
+        *count = 0;
+    }
+    if (array == NULL || array_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_err_t err = solar_os_json_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    const char *end = array + array_len;
+    const char *cursor = json_skip_space(array, end);
+    if (cursor == end || *cursor != '[') {
+        return ESP_FAIL;
+    }
+    cursor = json_skip_space(cursor + 1, end);
+    size_t index = 0;
+    if (cursor < end && *cursor == ']') {
+        cursor++;
+    } else {
+        for (;;) {
+            const char *element_end = NULL;
+            if (visit == NULL) {
+                element_end = json_skip_value(cursor, end);
+                if (element_end == NULL) {
+                    return ESP_FAIL;
+                }
+            } else {
+                cJSON *element = cJSON_ParseWithLengthOpts(cursor,
+                                                           (size_t)(end - cursor),
+                                                           &element_end,
+                                                           false);
+                if (element == NULL) {
+                    return ESP_FAIL;
+                }
+                bool stop = false;
+                err = visit((const solar_os_json_value_t *)element, index, &stop, user);
+                cJSON_Delete(element);
+                if (err != ESP_OK) {
+                    return err;
+                }
+                if (stop) {
+                    if (count != NULL) {
+                        *count = index + 1;
+                    }
+                    return ESP_OK;
+                }
+            }
+            index++;
+            cursor = json_skip_space(element_end, end);
+            if (cursor < end && *cursor == ',') {
+                cursor = json_skip_space(cursor + 1, end);
+                continue;
+            }
+            if (cursor < end && *cursor == ']') {
+                cursor++;
+                break;
+            }
+            return ESP_FAIL;
+        }
+    }
+    if (json_skip_space(cursor, end) != end) {
+        return ESP_FAIL;
+    }
+    if (count != NULL) {
+        *count = index;
+    }
+    return ESP_OK;
+}
+
 void solar_os_json_free(solar_os_json_doc_t *doc)
 {
     if (doc == NULL) {
@@ -281,6 +514,12 @@ esp_err_t solar_os_json_get_string(const solar_os_json_value_t *value,
         return ESP_ERR_INVALID_SIZE;
     }
     return ESP_OK;
+}
+
+const char *solar_os_json_string_value(const solar_os_json_value_t *value)
+{
+    return value != NULL && cJSON_IsString((const cJSON *)value) ?
+        ((const cJSON *)value)->valuestring : NULL;
 }
 
 esp_err_t solar_os_json_get_int64(const solar_os_json_value_t *value, int64_t *out)

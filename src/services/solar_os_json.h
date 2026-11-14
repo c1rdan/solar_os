@@ -27,6 +27,37 @@ esp_err_t solar_os_json_parse_ex(const char *source,
 esp_err_t solar_os_json_parse_cstr(const char *source, solar_os_json_doc_t **out_doc);
 void solar_os_json_free(solar_os_json_doc_t *doc);
 
+/*
+ * For a document whose array is too large to hold as one tree. Parses the
+ * top-level object in source except the member array_key, which must be an
+ * array: *array and *array_len receive that array's text inside source, and
+ * the returned document holds the other members. Returns ESP_ERR_NOT_FOUND
+ * when the object has no such member.
+ */
+esp_err_t solar_os_json_parse_object_except_array(const char *source,
+                                                  size_t source_len,
+                                                  const char *array_key,
+                                                  solar_os_json_doc_t **out_doc,
+                                                  const char **array,
+                                                  size_t *array_len);
+
+/*
+ * Visits the elements of a JSON array text one at a time, so only one
+ * element's tree exists at once. Setting *stop ends the walk early without
+ * checking the rest of the array. Returns the first error from the parser or
+ * from visit. With visit NULL, counts the elements without parsing them.
+ * *count, when given, receives the number of elements visited.
+ */
+typedef esp_err_t (*solar_os_json_element_fn)(const solar_os_json_value_t *element,
+                                              size_t index,
+                                              bool *stop,
+                                              void *user);
+esp_err_t solar_os_json_array_for_each(const char *array,
+                                       size_t array_len,
+                                       solar_os_json_element_fn visit,
+                                       void *user,
+                                       size_t *count);
+
 const solar_os_json_value_t *solar_os_json_root(const solar_os_json_doc_t *doc);
 const solar_os_json_value_t *solar_os_json_object_get(const solar_os_json_value_t *object,
                                                       const char *key);
@@ -46,6 +77,8 @@ bool solar_os_json_is_null(const solar_os_json_value_t *value);
 esp_err_t solar_os_json_get_string(const solar_os_json_value_t *value,
                                    char *out,
                                    size_t out_len);
+/* The value's text while its document lives, or NULL if it is not a string. */
+const char *solar_os_json_string_value(const solar_os_json_value_t *value);
 esp_err_t solar_os_json_get_int64(const solar_os_json_value_t *value, int64_t *out);
 esp_err_t solar_os_json_get_uint32(const solar_os_json_value_t *value, uint32_t *out);
 esp_err_t solar_os_json_get_bool(const solar_os_json_value_t *value, bool *out);

@@ -209,10 +209,10 @@ class ManualReleaseLimitTest(unittest.TestCase):
         docs_source = (
             REPOSITORY / "src/services/solar_os_docs.c"
         ).read_text(encoding="utf-8")
-        builder = docs_source[docs_source.index("static esp_err_t docs_build_manual_index("):]
+        builder = docs_source[docs_source.index("static esp_err_t docs_manual_index_page("):]
         builder = builder[:builder.index("\nstatic esp_err_t docs_verify_data(")]
         self.assertEqual(builder.count("solar_os_manual_embedded_count()"), 1)
-        self.assertIn("topic != count", builder)
+        self.assertIn("build.topic != index->count", builder)
 
     def test_runtime_index_matches_catalog_keyword_type(self):
         pages = generate_manual.load_pages(
@@ -230,7 +230,7 @@ class ManualReleaseLimitTest(unittest.TestCase):
         docs_source = (
             REPOSITORY / "src/services/solar_os_docs.c"
         ).read_text(encoding="utf-8")
-        builder = docs_source[docs_source.index("static esp_err_t docs_build_manual_index("):]
+        builder = docs_source[docs_source.index("static esp_err_t docs_manual_index_page("):]
         builder = builder[:builder.index("\nstatic esp_err_t docs_verify_data(")]
         self.assertRegex(
             builder,
@@ -277,7 +277,7 @@ class ManualReleaseLimitTest(unittest.TestCase):
         loader = loader[:loader.index("\ntypedef struct {")]
         self.assertRegex(
             loader,
-            r"docs_parse_catalog\(catalog,\s*catalog_len,\s*&document,\s*"
+            r"docs_parse_catalog\(catalog,\s*catalog_len,\s*&pages,\s*"
             r"&info,\s*false\)",
         )
 
@@ -285,7 +285,7 @@ class ManualReleaseLimitTest(unittest.TestCase):
         updater = updater[:updater.index("\nesp_err_t solar_os_docs_reset")]
         self.assertRegex(
             updater,
-            r"docs_parse_catalog\(catalog,\s*catalog_len,\s*&document,\s*"
+            r"docs_parse_catalog\(catalog,\s*catalog_len,\s*&pages,\s*"
             r"&info,\s*true\)",
         )
 

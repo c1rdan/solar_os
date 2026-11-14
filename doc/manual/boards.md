@@ -1764,9 +1764,9 @@ PSRAM at boot, and without drivers for hardware the PicoCalc does not have,
 including the header add-ons (servo, motor, encoder, 1-Wire, GPIO keys, I2S
 audio). It leaves about 108 KB of internal RAM and 1.4 MB of PSRAM free after
 boot, enough for Python's 512 KB heap. Under `SOLAR_OS_FLAVOR=full` only about
-550 KB of PSRAM stays free and Python cannot start. `help update` does not fit
-in either flavor: it needs more than 1.3 MB of PSRAM to parse the manual
-catalog.
+550 KB of PSRAM stays free and Python cannot start. `help update` also needs
+the `picocalc` flavor, for its 512 KB catalog download buffer. A downloaded
+manual then keeps its page index, about 270 KB, in PSRAM.
 
 ```sh
 pio run -e picocalc_esp32_s3_pico
