@@ -6,7 +6,9 @@
 
 #include "esp_err.h"
 #include "solar_os_display_surface.h"
+#include "solar_os_display_mono_canvas.h"
 #include "solar_os_display_maintenance.h"
+#include "solar_os_display_geometry.h"
 #include "solar_os_gfx.h"
 #include "solar_os_terminal.h"
 #include "u8g2.h"
@@ -45,11 +47,19 @@ typedef struct {
     char owner[SOLAR_OS_DISPLAY_TARGET_OWNER_MAX];
     uint16_t width;
     uint16_t height;
+    solar_os_display_rect_t panel, canvas;
+    bool round;
     bool ready;
     bool brightness_supported;
     bool black_is_one;
     uint32_t surface_formats;
     uint32_t frame_formats;
+    /* Working-buffer preference, independent of accepted transport formats.
+     * Applications may use the compact monochrome canvas on a color-capable
+     * target. The optional getter is sampled when taking a target snapshot. */
+    bool prefer_mono;
+    bool (*prefers_mono)(const void *context);
+    void *render_context;
     uint16_t preferred_stream_fps;
     /* Minimum caller task stack for synchronous presentation, bytes; 0 uses
      * the presenter's default. Protocol-backed targets may nest substantial I/O. */
@@ -71,7 +81,14 @@ typedef struct {
     void *relax_context;
     uint16_t native_width;
     uint16_t native_height;
+    bool epaper;
+    solar_os_display_mono_canvas_presenter_t present_canvas;
+    void *canvas_context;
 } solar_os_display_target_t;
+
+/* Runtime-only layout rectangle in the current panel's oriented/scaled pixels.
+ * NULL restores the panel's default canvas. Pixel drawing may overflow it. */
+esp_err_t solar_os_display_set_canvas(const char *name, const solar_os_display_rect_t *canvas);
 
 typedef struct {
     uint32_t cycles;
@@ -123,6 +140,8 @@ bool solar_os_display_find_target(const char *name, solar_os_display_target_t *t
 bool solar_os_display_target_name_for_u8g2(const u8g2_t *u8g2,
                                            char *name,
                                            size_t name_len);
+/* NULL selects display0. Unknown or unregistered displays return false. */
+bool solar_os_display_is_epaper(const u8g2_t *u8g2);
 esp_err_t solar_os_display_get_terminal_profile(
     const char *name,
     solar_os_terminal_profile_t *profile);
@@ -178,6 +197,10 @@ esp_err_t solar_os_display_set_layer(const char *name, const char *owner,
 esp_err_t solar_os_display_clear_layer(const char *name, const char *owner);
 bool solar_os_display_has_layer(const char *name, const char *owner);
 void solar_os_display_present(u8g2_t *u8g2, solar_os_display_present_mode_t mode);
+/* Areas use oriented/scaled panel pixels. Add the layout canvas origin when
+ * drawing with canvas-relative coordinates. NULL/zero selects a full frame. */
+void solar_os_display_present_regions(u8g2_t *u8g2, solar_os_display_present_mode_t mode,
+    const solar_os_display_rect_t *areas, size_t count);
 void solar_os_display_present_overlay(u8g2_t *u8g2,
                                       uint16_t x,
                                       uint16_t y,

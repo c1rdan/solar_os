@@ -11,21 +11,23 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 
 ## Shell and storage
 
+- [Native ELF modules](native-modules.md) — Load and manage native apps, jobs, drivers, and libraries
 - [Shell command reference](commands.md) — Complete syntax, behavior, and examples for built-in shell commands
 - [Storage and shell paths](storage.md) — Use SolarOS volumes, files, directories, and shell-style paths
 
 ## Commands
 
 - [adc command](commands.md) — Show ADC service status.
-- [agent command](agent.md) — Open a new native LLM agent TUI or make one unsaved foreground request.
+- [agent command](agent.md) — Text/image questions and speech. Guide.
 - [apps command](commands.md) — List registered foreground apps compiled into the firmware.
 - [audio command](commands.md) — Show audio state, global speaker level, tone queue, and active synth telemetry.
-- [battery command](commands.md) — Show voltage, state of charge, power source, config, and monitor trend.
+- [battery command](commands.md) — Show voltage, state of charge, power source, charging state, and estimated time left.
 - [ble command](commands.md) — Show BLE keyboard state and the current/next boot setting.
 - [board command](commands.md) — Print board ID, name, and capabilities.
-- [camera command](commands.md) — Initialize the camera on first use and show the detected sensor, JPEG configuration, current owner and frame lease, capture count, and last error.
+- [camera command](commands.md) — Initialize on first use; show sensor, settings, owner, leases, captures, and last error.
 - [can command](commands.md) — List the attached classic CAN controller and bitrate. See Classic CAN.
 - [cat command](commands.md) — Print a small text file.
+- [cc command](commands.md) — Compile native C applications and browse SDK headers. Included in full on ESP32-S3 boards with PSRAM; other builds can enable the cc group or install cc. Bare cc and cc --help display usage successfully. See C development.
 - [cd command](commands.md) — Change current shell directory.
 - [charger command](commands.md) — List registered battery chargers, concrete drivers, and valid configuration ranges.
 - [clear command](commands.md) — Clear the active shell terminal.
@@ -45,7 +47,7 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [dpad command](commands.md) — Show ADC D-pad pins, raw values, zones, and calibration thresholds.
 - [echo command](commands.md) — Print the arguments separated by spaces, followed by a newline. Quotes preserve spaces and are not printed.
 - [email command](commands.md) — Open the receive-only email app.
-- [encoder command](encoder.md) — List named encoders, providers, and counting modes.
+- [encoder command](encoder.md) — Configure PPR, transmission, polarity or filtering for enc.<name> velocity feedback.
 - [engine command](commands.md) — Print or reset generic engine utilization counters for CPU/SIMD-style backends and vector bulk operations.
 - [espnow command](commands.md) — Show ESP-NOW owner, channel, PHY, peers, traffic, drops, conflicts, and last error.
 - [exit command](commands.md) — Close the current UART, USB CDC, or telnet shell when another interactive shell remains.
@@ -53,6 +55,7 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [fg command](commands.md) — Resume a display session or a port-owned app on its owning terminal. Without an ID, restore the calling port shell's most recently suspended app.
 - [gateway command](commands.md) — Show gateway configuration, connection state, and traffic counters.
 - [gesture command](commands.md) — List gesture-capable sensors and touchscreens, readiness, and the gesture kinds each source advertises.
+- [git command](git.md) — Version projects locally, over SSH or anonymous HTTPS. See Git.
 - [gnss command](commands.md) — List registered GNSS receivers and their concrete drivers.
 - [gpio command](commands.md) — List board GPIOs with free, releasable, or fixed pin policy.
 - [haptic command](commands.md) — List registered haptic devices, their concrete drivers, and supported effect range.
@@ -77,23 +80,23 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [messages command](commands.md) — Open the tabbed instance, connection, and message manager.
 - [midi command](commands.md) — Show MIDI worker, traffic, parser, and queue status.
 - [mkdir command](commands.md) — Create directories.
-- [model command](commands.md) — Check engine availability and inspect resident models, interfaces, memory, mode, and references.
+- [model command](commands.md) — Inspect engine, model inventories across backends, or a resident handle.
 - [modem command](commands.md) — Open the modem status and settings TUI.
-- [motor command](motor.md) — List registered motor endpoints, drivers, and supported operations.
+- [motor command](motor.md) — Configure the generic motor service and mot.<name> drive sink while unclaimed.
 - [mqtt command](commands.md) — Show broker, authentication, connection, traffic, queue, and error status without revealing the password.
 - [mv command](commands.md) — Rename or move a file or matched set.
 - [neopixel command](commands.md) — List attached WS2812/NeoPixel strips.
 - [netscan command](commands.md) — Scan TCP ports on one host or a capped IPv4 range.
 - [network command](commands.md) — Open the two-tab network TUI. Status shows interfaces and routes; Settings changes persistent interface priority and client routing.
 - [nfc command](commands.md) — List registered NFC readers and their concrete drivers.
-- [ntp command](commands.md) — Sync the wall clock from NTP.
+- [ntp command](commands.md) — Sync the wall clock from NTP (default server pool.ntp.org). Waits up to 40 s, so lwIP can retry one lost packet, then prints ntp: sync timed out.
 - [nvs command](commands.md) — Show the default NVS partition size, entry usage, and namespace count.
 - [onewire command](commands.md) — Show every registered named 1-Wire bus, or one selected bus.
 - [osc command](commands.md) — Inspect named outbound OSC bindings and their live source, value, send, and error state.
 - [ota command](commands.md) — Show running and configured OTA state.
 - [outbox command](commands.md) — List pending outbound messages. Sent and failed messages remain in conversation history, not Outbox.
 - [ping command](commands.md) — Send ICMP echo requests. Without count, ping runs until Esc, Ctrl+C, or app-exit.
-- [pipeline command](commands.md) — List OS-owned native image pipelines.
+- [pipeline command](commands.md) — Inspect native processing jobs, errors and timings.
 - [pkg command](commands.md) — Open the native-module package manager.
 - [pocsag command](commands.md) — Show POCSAG receiver configuration, counters, correction statistics, and RSSI.
 - [port command](commands.md) — List byte-stream ports.
@@ -107,11 +110,13 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [rtc command](commands.md) — Show the RTC provider, capabilities, interrupt wiring, and alarm/timer owners. Reports unavailable when no RTC is present.
 - [rtsp-auth command](commands.md) — List stored RTSP client accounts (host, port, username; never the password).
 - [say command](commands.md) — Queue text for offline speech, or stream a plain UTF-8 text file aloud with live progress. Pitch and speed default to 100. File mode submits bounded chunks through one continuous PicoTTS/audio session, completes paths with Tab, and remains responsive; press Esc or Ctrl+C to stop. Start speechd with a PicoTTS voice directory first.
+- [sc2 command](commands.md) — Show this device's SC2 end-to-end identity (device ID, fingerprint, prekeys) and the service state. Creates the identity on first use. See man python.sc2.
 - [schedule command](commands.md) — List persistent alarms and scheduled shell scripts. Entries show their enabled state, trigger, and action.
+- [screen-keyboard command](commands.md) — Inspect or control the running screen-keyboard job. Touch or arrow keys select keys; Enter activates the selection.
 - [servo command](servo.md) — Show names, outputs, enabled state, and owners in a compact list.
 - [session command](commands.md) — List display sessions, port shells, and retained port-owned application sessions with their owner.
 - [sessions command](commands.md) — List display app sessions, display shell sessions, and port shell sessions.
-- [setterm command](commands.md) — Open the terminal settings TUI from the display shell.
+- [setterm command](commands.md) — Display-shell settings: arrows select, PgUp/PgDn page, Enter edits, Esc exits.
 - [sh command](commands.md) — Run a simple SolarOS shell script from storage.
 - [shutdown command](commands.md) — Stop apps and jobs, flush storage, and power down. Only the physical power/KEY button, RESET, or a power cycle starts a fresh boot.
 - [sleep command](commands.md) — Enter explicit light sleep.
@@ -126,6 +131,7 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [uart command](commands.md) — Show the default uart0 or a selected named UART bus.
 - [unzip command](commands.md) — List or extract a ZIP archive.
 - [uptime command](commands.md) — Print elapsed time since boot.
+- [usb command](commands.md) — USB modes and GPIO reuse.
 - [version command](commands.md) — Print the SolarOS version and firmware flavor.
 - [wait command](commands.md) — Pause the calling shell or shell script for 0 through 86400 seconds.
 - [watch command](commands.md) — Repeat another shell command until Esc, q, or the app-exit key is pressed.
@@ -143,10 +149,11 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [Apple II Plus application](app.apple2.md) — Run Apple II Plus software with the external foreground module
 - [Application reference](apps.md) — Usage, controls, and examples for every foreground application
 - [arecord application](apps.md#arecord) — Record a registered capture endpoint to a WAV file. The default is the first compatible input; -i selects a specific stream such as adc0.capture. This requires a registered input device, but not built-in board audio. With -d, recording stops after the specified number of seconds. Without -d, recording continues until app-exit, the storage fills, or the WAV size limit is reached. It can be launched from display, UART, USB CDC, Telnet, and other port shells.
+- [c64 application](app.c64.md) — Run Commodore 64 software with the external foreground module
 - [calc application](apps.md#calc) — Scientific calculator and function plotter. On a graphical display, calc opens an expression list beside a Cartesian plot. From UART, USB CDC, Telnet, or any other text-only shell, the same command opens a scientific REPL without the plot pane. calc --tui forces that REPL even when graphics are available.
 - [chat application](apps.md#chat) — Tabbed provider-neutral conversation client. The Channels tab groups conversations by named instance, including IRC, Gateway, MeshCore, and Link. Enter selects a conversation and opens its bounded shared history on the Chat tab, which also contains the message/command input. The app opens and remains useful offline; network or radio transport jobs connect independently.
 - [clock application](apps.md#clock) — Full-screen graphical seven-segment clock, alarm countdown, and stopwatch. The countdown is serviced in the background, so it continues when the Clock session is suspended. It works without RTC hardware while SolarOS remains powered. With a wired RTC interrupt, the RTC alarm or countdown is also armed and explicit light sleep can wake for it.
-- [com application](apps.md#com) — Serial terminal for a bidirectional byte-stream port. Display-keyboard or port-shell input is forwarded to the selected port, and received bytes are drawn in the active terminal. The port may be a UART or a virtual port such as a peer-bound SolarOS Link stream.
+- [com application](apps.md#com) — Serial terminal for a bidirectional byte-stream port. Display-keyboard or port-shell input is forwarded to the selected port, and received bytes are drawn in the active terminal. The port may be a UART, a hosted USB serial adapter such as usb-serial0, or a virtual port such as a peer-bound SolarOS Link stream. Configure USB serial settings with usb serial PORT OPTIONS before opening com; see USB host.
 - [contacts application](apps.md#contacts) — Provider-neutral address book for gateway and MeshCore identities. Contacts can carry multiple provider endpoints while retaining trust independently for each endpoint. A signed MeshCore advert creates a discovered endpoint: the signature proves possession of the advertised key, not the human identity behind it.
 - [curl application](apps.md#curl) — HTTP client for quick text downloads and diagnostics. It can print response data to the terminal or save it to a file.
 - [dlp application](apps.md#dlp) — Use a named SolarOS display as a Display Link Protocol receiver. The dlp package requires graphics support. One receiver may run at a time.
@@ -154,7 +161,7 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [edit application](apps.md#edit) — Text editor for files on mounted storage. It supports cursor navigation, selection, clipboard operations, text-size changes, and syntax highlighting for known source files. The editor supports files up to 256 KiB on boards with PSRAM and 32 KiB on boards without PSRAM. Use hexedit for binary files.
 - [email application](apps.md#email) — Receive-only IMAPS client for the configured mailbox. The app shows the provider-specific message list while every newly synchronized message is also published to the universal inbox and its shared status-bar unread counter.
 - [files application](apps.md#files) — File manager inspired by Midnight Commander. Its normal mode provides two panes for copy, move, delete, and launch workflows on mounted storage. Launcher mode provides a minimal single-pane application menu suitable for a startup script.
-- [Flash another ESP board](flash.md) — Download verified SolarOS factory images and program another ESP board over UART
+- [Flash another ESP board](flash.md) — Download verified SolarOS factory images and program another ESP board over UART or hosted USB serial
 - [flash application](apps.md#flash) — Download verified SolarOS factory artifacts to SD and program another supported ESP board over UART. The browser refreshes the signed catalog on request and shows which board, flavor, and version artifacts are already cached. Its tree starts folded and retains its selection and fold state after operations. Delete removes a selected cached artifact after confirmation. The shell form accepts a named UART plus optional boot and reset GPIO pins.
 - [ftp application](apps.md#ftp) — Two-pane FTP file manager. The left pane is local mounted storage. The right pane is a remote FTP server. The app uses unencrypted IPv4 FTP and passive data connections.
 - [funcgen application](apps.md#funcgen) — Audio-only function generator built on the shared real-time Synth service. It emits signed 16-bit stereo PCM and can use the default playback device or an explicitly selected runtime playback stream, including an attached LEDC PWM audio expansion.
@@ -171,9 +178,10 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [lua application](apps.md#lua) — Embedded Lua runtime. It can run an interactive REPL or execute .lua scripts from storage. Lua scripts can use SolarOS service bindings when the selected firmware includes the corresponding packages. Foreground scripts can consume touch coordinates, relative mouse motion, buttons, and joystick axes through solaros.input.
 - [Macintosh Plus application](app.mac.md) — Run Macintosh Plus software with the external foreground module
 - [messages application](apps.md#messages) — Manage messaging instances, connections, and local message history on the display or a VT100 terminal. Run messages without arguments to open the TUI. Existing messages subcommands remain available for shell and scripting use.
-- [Native SolarOS agent](agent.md) — Configure and use the resumable LLM agent and its typed tools
+- [Native SolarOS agent](agent.md) — Ask questions with text and images, hear synthesized answers, and use the agent's typed tools
 - [notes application](apps.md#notes) — Markdown-backed checklist and category manager. It stores unchecked and checked items and supports one level of category folding. A persistent bottom help bar shows the available controls, with status or text input directly above it.
-- [player application](apps.md#player) — Interactive WAV/MP3 player and the user-facing counterpart to aplay. player keeps a persistent playlist under .player on the current storage root. Opening an audio file from Files adds it to that playlist, selects it, and starts playback. Missing files remain listed so removable media can be reattached.
+- [photo application](apps.md#photo) — Live viewfinder and still capture from a registered JPEG video source or an RTSP JPEG camera. The default source is camera0; this application requires a graphical display and PSRAM. Select the photo package group. Local camera providers are supplied by the camera group; RTSP reception is included on Wi-Fi boards and uses the same UDP JPEG transport as the rtsp application. JPEG frames are limited to 2 megapixels and 512 KiB.
+- [player application](apps.md#player) — Interactive WAV/MP3 player and the user-facing counterpart to aplay. player keeps a persistent M3U playlist under .player on the current storage root. Opening an audio file from Files adds it to that playlist, selects it, and starts playback. Missing files remain listed so removable media can be reattached.
 - [Playground](playground.md) — Browse, install, uninstall, and run community Python and Lua applications
 - [playground application](apps.md#playground) — Browse the configured community catalog as a foldable category tree, search applications, and install, update, uninstall, or run Python and Lua scripts.
 - [plot application](apps.md#plot) — Graphical plotter for DAQ CSV files and live scalar streams. It is compatible with CSV generated by the daq job.
@@ -186,17 +194,17 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [sftp application](apps.md#sftp) — Two-pane SFTP file manager with the same panes, file operations, progress, and key bindings as ftp. The left pane is local mounted storage and the right pane is a remote SSH server's SFTP subsystem. It uses the shared SSH transport, known-host policy, host aliases, and password or public-key authentication.
 - [sftpsync application](apps.md#sftpsync) — Incremental file and directory synchronization over SSH. The SolarOS client uses the server's SFTP subsystem, so it works with a normal SSH server without requiring a matching remote program. It skips regular files whose size and modification time already match. It does not delete destination-only files.
 - [sheet application](apps.md#sheet) — CSV viewer for small data tables. It is intended as a companion to daq logs and simple spreadsheet-like inspection.
-- [sketch application](apps.md#sketch) — Pointer-driven graphical paint application. Its layout follows classic desktop paint programs: Save, Open, Import, and the sidebar controls share one aligned, equal-sized button grid; color and pattern choices are in the bottom bar. Sketch uses a compact four-color canvas and stores finished documents as interoperable indexed-color PNG files. Color TFTs show the native palette; one-bit displays use the existing dithered rendering path.
+- [sketch application](apps.md#sketch) — Pointer-driven graphical paint application. Its layout follows classic desktop paint programs: Save, Open, Import, and the sidebar controls share one aligned, equal-sized button grid; color and pattern choices are in the bottom bar. Sketch uses a compact four-color canvas and stores finished documents as interoperable indexed-color PNG files. Color TFTs show the native palette; one-bit displays use the existing dithered rendering path. Runtime rotation preserves the drawing and its saved dimensions. The canvas fits inside the new viewport, and pointer input follows the fitted image. Gray margins mark space outside the drawable canvas after rotation.
 - [ssh application](apps.md#ssh) — Interactive SSH client. It supports password and key authentication, known hosts, hostname lookup through /.ssh/hosts, UTF-8 text, VT-style controls, and remote full-screen terminal applications. When user@ is omitted, SSH uses the NVS-backed SolarOS identity user. Tab completion reads aliases from /.ssh/hosts and preserves an explicit user@ prefix.
 - [synth application](apps.md#synth) — Open the native synthesizer and sound designer:
 - [telnet application](apps.md#telnet) — Telnet client for classic TCP terminal sessions. It supports basic Telnet option negotiation, terminal type reporting, window size reporting, and raw mode.
 - [Tiny386 application](app.tiny386.md) — Boot PC floppy and hard-disk images with the external 386 emulator
 - [view application](apps.md#view) — Graphical image viewer. It supports the image formats compiled into the current firmware, including common PNG/JPEG/GIF/WebP paths and automatic animated GIF playback when the media package is enabled. Images are decoded as RGB on a negotiated indexed-color display and as grayscale on a one-bit display. In the default fit mode, JPEG color conversion writes display-sized output directly, so a large source photograph does not require a full-size RGB destination.
 - [vplay application](apps.md#vplay) — Graphical MPEG-1 media player with optional MP2 audio. The bottom controls show playback status and elapsed time above the volume bar; full screen hides the controls and time. The middle Stop/Play icon indicates pause while paused.
-- [web application](apps.md#web) — Simple graphical web browser for lightweight HTML pages. It shares document and image rendering infrastructure with reader where possible. Embedded and direct PNG, JPEG, GIF, and WebP images retain color on indexed-color displays; one-bit displays keep the grayscale decode and dither path. Direct MJPEG URLs are shown as live video using the same JPEG renderer.
+- [web application](apps.md#web) — Graphical browser for lightweight HTML pages, with an editable address bar, Back, Forward, Reload/Stop, Go, pointer navigation, and text zoom. Embedded and direct PNG, JPEG, GIF, and WebP images retain color on indexed-color displays; one-bit displays use grayscale decoding and dithering. Direct MJPEG URLs are shown as live video.
 - [webradio application](apps.md#webradio) — Stream a direct MP3 URL through the default registered audio output. On a graphical display shell, WebRadio opens a two-tab media-player GUI. The GUI uses compact controls, scrolling channels and fitted edit dialogs on small display targets. On UART, USB CDC, Telnet, SSH, and other text shells, it opens a station-list TUI.
 - [writer application](apps.md#writer) — Resumable graphical Markdown editor for PSRAM display boards. Inactive blocks are formatted like reader; the block containing the cursor and every block touched by a selection show their exact Markdown source. edit remains the portable text editor for port shells and boards without graphics or PSRAM.
-- [zoo application](apps.md#zoo) — Browse the hosted model zoo and install complete model bundles on mounted SD or flash storage. The text interface works on the display and VT100 port shells. It requires the Zoo package, ESP32-S3, PSRAM, and networking.
+- [zoo application](apps.md#zoo) — Browse the hosted model zoo and install complete model bundles on mounted SD or flash storage. The text interface works on the display and VT100 port shells. It requires the Zoo package, ESP32-S3, and PSRAM. Networking is needed to refresh the catalog or download a bundle; browsing and removing installed bundles work offline.
 
 ## Background jobs
 
@@ -224,13 +232,14 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [meshcore-ble job](jobs.reference.md#meshcore-ble) — MeshCore companion-protocol client for a separate BLE radio device. The job connects to one explicit peer, synchronizes its contacts and channels, drains queued messages, and carries Chat messages through the standard MeshCore messaging provider.
 - [midi job](jobs.reference.md#midi) — Bidirectional MIDI transport on an exclusive named MIDI bus. The bus selects an available UART controller internally; users supply only its MIDI name, TX and RX pins, and an optional baud rate.
 - [ntp-sync job](jobs.reference.md#ntp-sync) — Network time synchronization job. It updates the SolarOS wall clock from NTP and also updates the hardware RTC when the board provides one.
-- [osc job](jobs.reference.md#osc) — OSC 1.0 IPv4 UDP adapter for automatic incoming native-parameter writes and explicit named outbound stream, event-stream, or normalized-control bindings.
+- [osc job](jobs.reference.md#osc) — OSC 1.0 IPv4 UDP adapter for incoming native-parameter writes, named scalar stream receive bindings, and outbound stream, event-stream or control bindings.
 - [pocsag job](jobs.reference.md#pocsag) — POCSAG pager receiver job. It configures a registered packet radio for a continuous POCSAG byte stream, frames successive 64-byte batches, filters pages to one receiver identity code (RIC), decodes alphanumeric or numeric payloads, and publishes completed messages to the universal inbox.
 - [pointer-arrows job](jobs.reference.md#pointer-arrows) — Consume one named pointer source and hold arrow keys while it moves:
 - [pppd job](jobs.reference.md#pppd) — PPP over any bidirectional SolarOS byte-stream port. A physical UART, USB CDC, or a virtual port carried by a packet-radio link can provide the bytes; the PPP negotiation mode and the interface's routing role are configured separately.
 - [ps2-keyboard job](jobs.reference.md#ps2-keyboard) — Receives keyboard scan-code set 2 from an exclusive named PS/2 bus and publishes press and release transitions through the generic SolarOS input service. This job is a compatibility wrapper around a ps2-keyboard expansion attachment; new configurations can attach the device directly.
 - [radio-link job](jobs.reference.md#radio-link) — Packet-radio adapter for the transport-independent SolarOS Link service.
 - [rtspd job](jobs.reference.md#rtspd) — Publish explicitly selected sources as a standard single-client RTSP session. Video uses RTP/JPEG; audio uses RTP/L16 PCM. Each enabled track has its own RTP/RTCP UDP port pair, SSRC, and sender reports, with a shared RTCP CNAME and session start clock.
+- [screen-keyboard job](jobs.reference.md#screen-keyboard) — The screen keyboard supplies touch and keyboard input above the shell, TUIs, and graphical applications on a selected display. Start the background job to arm its activation actions:
 - [slip job](jobs.reference.md#slip) — IPv4 SLIP gateway on a byte-stream port. This is intended for retro machines, headless boards, and serial networking experiments. The active interface is named with the slip- prefix plus the selected port, for example slip-uart0. It appears as a downstream NAT link in the Network views; its traffic follows the selected SolarOS route, which can be Wi-Fi, cellular, or WireGuard.
 - [speechd job](jobs.reference.md#speechd) — Offline text-to-speech queue. The optional job loads a PicoTTS voice from storage into PSRAM and accepts asynchronous requests from native applications, Python, and Lua.
 - [sump job](jobs.reference.md#sump) — SUMP-compatible logic analyzer server on cdc0. It claims the CDC port and uses the shared logic analyzer service for acquisition. PulseView and sigrok can connect with the OpenBench Logic Sniffer/SUMP serial driver.
@@ -238,8 +247,9 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 
 ## Networking and security
 
+- [Git version control](git.md) — Version small projects locally and synchronize Git repositories over SSH or anonymous HTTPS
 - [Network interfaces, routing, Wi-Fi, WireGuard, and APIs](network.md) — Connect, inspect, and communicate over installed network services
-- [Open Sound Control](osc.md) — Control live app parameters and publish named stream or control bindings over OSC 1.0 UDP
+- [Open Sound Control](osc.md) — Receive scalar stream commands, control live parameters and publish named OSC bindings over UDP
 - [SSH identity keys](ssh_keys.md) — Inspect, share, generate, and remove the default SSH key pair
 
 ## Hardware and expansion
@@ -248,35 +258,45 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [Classic CAN](hardware.can.md) — Attach a TWAI CAN controller, exchange frames, and inspect bus errors
 - [Continuous controls](controls.md) — Map analog and other scalar inputs to app parameters or MIDI CC
 - [Encoder counts](encoder.md) — Attach named quadrature encoders with explicit x1, x2, or x4 counting
+- [ES7243 microphone ADCs](es7243.md) — Capture stereo I2S audio with ES7243 or ES7243E, independently or with ES8311 output
 - [Expansion drivers and attached devices](expansion.md) — Discover, attach, and detach package-gated expansion devices
 - [Expansion hardware reference](expansion.reference.md) — Resource rules, workflows, drivers, bindings, and wiring examples
 - [Feedback controllers](controllers.md) — Run PID and hysteresis controllers with timestamped measurements and owned outputs
 - [GPIO, ADC, PWM, and LED APIs](gpio.analog.md) — Use runtime-safe digital and analog expansion pins
+- [Himax HX6538 camera](himax-hx6538.md) — JPEG sampling through the factory Himax HX6538 SSCMA firmware
+- [Himax model management](himax-models.md) — Program storage bundles into HX6538 model slots and select a model
 - [Motor control](motor.md) — Control named motors with normalized drive commands
 - [Robot joints](robot.md) — Use the optional external robot library for calibrated servo and motor/encoder joints
+- [Robot models and transforms](robot-models.md) — Load URDF models, query transforms and run declared joint and differential-drive components
+- [SenseCAP Watcher](watcher.md) — Board devices, expansion connectors, and display console for Seeed Studio SenseCAP Watcher
 - [Servo outputs](servo.md) — Control calibrated positional servos with hardware PWM
 - [Source keymaps](input.keymap.md) — Inspect and customize registered input-source mappings
-- [Time, battery, and environment APIs](time.sensors.md) — Read clocks, battery state, temperature, and humidity
+- [SPD2010 QSPI display](spd2010.md) — Attach a 412x412 RGB565 display over a dedicated four-line SPI interface
+- [Time, battery, and environment APIs](time.sensors.md) — Read clocks, battery state, environment, and IMU measurements
+- [USB host](usb.host.md) — Select USB off/device/host mode and use input, serial adapters, or FAT storage
 
 ## Scripting APIs
 
+- [AOgmaNeo online learning](aogmaneo.md) — Use sparse predictive hierarchies, actors and image encoders from C, Python and Lua
+- [C development](c.md) — Compile native C programs, build projects, and browse SDK headers
 - [Compatibility I/O modules](compatibility.io.md) — Use the legacy single-bus I2C, SPI, UART, and OneWire APIs
 - [Computer vision](vision.md) — Native QR decoding, statistics, segmentation, filtering, morphology, image difference, and blobs
 - [Digital signal processing](dsp.md) — Portable fixed-point DSP operations, streaming contexts, and script APIs
 - [Emotion engine](emotion.md) — Animated facial expressions and optional reaction sounds for Python and Lua
 - [Jet 3D renderer](jet.md) — Script-defined 3D scenes using the resident Jet library
+- [Lua agent API](lua.agent.md) — Ask language models about text, images, or audio files and manage conversations
 - [Lua API overview](lua.md) — Runtime basics, conventions, and service API topic index
-- [Lua apps, jobs, and identity API](lua.system.md) — Apps, jobs, and identity: identity, jobs, sessions, apps
 - [Lua audio and control API](lua.audio.md) — Audio and control: audio, synth, dsp, controls, parameters, midi, osc
 - [Lua bluetooth API](lua.ble.md) — Bluetooth: ble
+- [Lua board, apps, jobs, and identity API](lua.system.md) — Board information, apps, jobs, and identity: board, identity, jobs, sessions, apps
 - [Lua buses and expansion API](lua.buses.md) — Buses and expansion: buses, expansion
 - [Lua camera, streams, and RTSP API](lua.media.md) — Owned local stream frames, camera snapshots, native images, and asynchronous RTSP sessions
 - [Lua contacts and messages API](lua.messaging.md) — Contacts and messages: contacts, messages
-- [Lua SC2 end-to-end chat security API](lua.sc2.md) — SC2 end-to-end encryption: sc2
 - [Lua gpio and peripherals API](lua.hardware.md) — GPIO and peripherals: gpio, onewire, led, adc, pwm, servo, motor, encoder, i2c, spi, uart, neopixel, battery, charger, sensors, GNSS, haptic, IMU, NFC
 - [Lua graphics API](lua.gfx.md) — Draw through SolarOS displays from Lua
 - [Lua input and clipboard API](lua.input.md) — Input and clipboard: input, hid, clipboard
 - [Lua networking API](lua.network.md) — Networking: wifi, mqtt, http, net, ftp, sftpsync, ssh_keys
+- [Lua SC2 end-to-end chat security API](lua.sc2.md) — SC2 end-to-end encryption: sc2
 - [Lua storage and files API](lua.storage.md) — Storage and files: storage
 - [Lua text user-interface API](lua.tui.md) — Build terminal applications from Lua
 - [Lua time and scheduling API](lua.time.md) — Time and scheduling: time, rtc, schedule
@@ -284,21 +304,22 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 - [Model inference](inference.md) — Load resident ESP-DL models from storage and execute named tensor inputs and outputs
 - [Named runtime buses](buses.md) — Create and use resource-owned I2C, SPI, UART, MIDI, OneWire, and PS/2 buses
 - [Native foreground apps](native-app.md) — Install native apps, switch sessions, and use the foreground module API
-- [Native image pipelines](pipelines.md) — OS-owned QR and model processing jobs with bounded latest results and frame timings
+- [Native image pipelines](pipelines.md) — OS-owned image processing jobs with built-in or external processors and matching encoded samples
 - [Native libraries](native-library.md) — Install reusable native libraries and manage their lifetime
 - [Native media and inference](native-media.md) — Versioned image, camera/RTSP, QR, imlib and resident-model interfaces for ELF modules
+- [Python agent API](python.agent.md) — Ask language models about text, images, or audio files and manage conversations
 - [Python API overview](python.md) — Runtime basics, conventions, and service API topic index
-- [Python apps, jobs, and identity API](python.system.md) — Apps, jobs, and identity: identity, jobs, sessions, apps
 - [Python audio and control API](python.audio.md) — Audio and control: audio, synth, dsp, controls, parameters, midi, osc
 - [Python bluetooth API](python.ble.md) — Bluetooth: ble
+- [Python board, apps, jobs, and identity API](python.system.md) — Board information, apps, jobs, and identity: board, identity, jobs, sessions, apps
 - [Python buses and expansion API](python.buses.md) — Buses and expansion: buses, expansion
 - [Python camera, streams, and RTSP API](python.media.md) — Owned local stream frames, camera snapshots, native images, and asynchronous RTSP sessions
 - [Python contacts and messages API](python.messaging.md) — Contacts and messages: contacts, messages
-- [Python SC2 end-to-end chat security API](python.sc2.md) — SC2 end-to-end encryption: sc2
 - [Python gpio and peripherals API](python.hardware.md) — GPIO and peripherals: gpio, onewire, led, adc, pwm, servo, motor, encoder, i2c, spi, uart, neopixel, battery, charger, sensors, GNSS, haptic, IMU, NFC
 - [Python graphics API](python.gfx.md) — Draw through SolarOS displays from MicroPython
 - [Python input and clipboard API](python.input.md) — Input and clipboard: input, hid, clipboard
 - [Python networking API](python.network.md) — Networking: wifi, mqtt, http, net, ftp, sftpsync, ssh_keys
+- [Python SC2 end-to-end chat security API](python.sc2.md) — SC2 end-to-end encryption: sc2
 - [Python storage and files API](python.storage.md) — Storage and files: storage
 - [Python text user-interface API](python.tui.md) — Build terminal applications from MicroPython
 - [Python time and scheduling API](python.time.md) — Time and scheduling: time, rtc, schedule
@@ -317,5 +338,6 @@ This is the canonical documentation used by GitHub, the generated solar-os.eu we
 
 - [Boards and hardware targets](boards.md) — Supported boards, capabilities, porting structure, and validation
 - [Firmware packages and flavors](packages.md) — Choose firmware features and create custom builds
+- [Running SolarOS in QEMU](qemu.md) — Build and launch the qemu_esp32s3 boards in Espressif's QEMU, with native input, host storage, audio output, and networking
 
 The TOML frontmatter on each topic controls package availability, search metadata, and placement in the documentation tree. Edit the topic itself; do not maintain a separate device or website copy.

@@ -2,6 +2,7 @@
 
 #include "solar_os_terminal.h"
 #include "u8g2.h"
+#include "solar_os_display_canvas_draw.h"
 
 #define SOLAR_OS_TERMINAL_SCROLLBACK_ROWS 256
 #define SOLAR_OS_TERMINAL_ATTR_WORDS ((SOLAR_OS_TERMINAL_MAX_COLS + 31) / 32)
@@ -37,6 +38,10 @@ struct solar_os_terminal {
     size_t cursor_row;
     size_t cursor_col;
     bool cursor_visible;
+    uint32_t cursor_activity_ms;
+    bool rendered_cursor_on;
+    bool rendered_cursor_blink;
+    solar_os_terminal_cursor_shape_t rendered_cursor_shape;
     size_t rows;
     size_t cols;
     solar_os_terminal_vrule_t vrules[SOLAR_OS_TERMINAL_MAX_VRULES];
@@ -67,6 +72,7 @@ struct solar_os_terminal {
     uint32_t rendered_footer_hash;
     uint32_t rendered_profile_hash;
     uint32_t rendered_display_epoch;
+    uint32_t rendered_font_pack_generation;
     bool render_valid;
     bool dirty;
 };

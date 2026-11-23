@@ -2,6 +2,143 @@
 
 ## 4.x
 
+- **4.18.3** — 2026-11-23 — Improved Web with an editable address bar,
+  Back, Forward, Reload/Stop and Go controls, touch and pointer navigation,
+  and `Ctrl++`/`Ctrl+-` text zoom while editing fields. Web can now open without
+  a URL.
+  Added compact battery reports, detailed discharge statistics, saved runtime
+  estimates, and charging detection from voltage changes when hardware status
+  is unavailable. Improved reTerminal E1003 display speed and IT8951 sleep
+  handling; added an optional two-level monochrome mode and reduced display
+  and Mac video memory use. Fixed delayed or broken telnet navigation keys.
+  Expanded the C SDK headers supplied with installed native libraries,
+  including Robot, Emotion, ESP-DL and Himax.
+- **4.18.2** — 2026-11-20 — Added headless and display QEMU targets for
+  running SolarOS on a computer, with a serial console, shared host-directory
+  storage, and audio playback. The display target adds keyboard, touch and
+  mouse input, and networking. Added a Commodore 64 native app for ESP32-S3
+  boards with graphics and PSRAM, including built-in BASIC ROMs, PRG loading,
+  joystick controls, and SID audio. Fixed the default ST7789 display size to
+  320x240. Battery monitoring now uses hardware power-source status when
+  available and avoids low-voltage sleep or shutdown while external power is
+  present.
+- **4.18.1** — 2026-11-19 — Added Ukrainian, French and Romanian keyboard
+  layouts, dead-key composition, and Ctrl+Space switching between saved layouts,
+  with the active layout shown in the status bar. Improved UTF-8 text input and
+  rendering in Writer and the display shell. Added loadable Cyrillic and
+  extended Latin font packs for characters missing from the built-in fonts.
+  E-paper cursors now default to a steady block; fixed paging in terminal
+  settings. Added the optional AOgmaNeo online learning library for ESP32-S3
+  boards with executable PSRAM, with C, Python and Lua APIs for sequence
+  prediction, reinforcement learning, and image encoding and reconstruction.
+  Improved T-Deck Plus startup, documentation catalog loading, and message
+  history restoration speed. Fixed numbered list rendering and preservation in
+  Writer and Reader, and improved NTP synchronization when packets are lost.
+- **4.18.0** — 2026-11-17 — Added on-device C compilation for ESP32-S3
+  boards with PSRAM, including multi-file projects, installed library headers,
+  SDK browsing and header export. The compiler is included in the full flavor
+  and available as an optional firmware feature or installable package.
+  The editor now highlights C source files and headers.
+  Added Seeed Studio SenseCAP Watcher support with its round touchscreen,
+  wheel, Himax camera, microphone and speaker, microSD, RTC, and battery
+  monitoring. Watcher starts its shell on the display, supports BLE keyboards
+  and wheel-button wake, and leaves native USB off so expansion GPIO19/20
+  remain free. Added reusable PCA9535 GPIO expander, SPD2010 display/touch,
+  and ES7243/ES7243E microphone drivers. Added Photo with a live viewfinder,
+  JPEG capture from cameras or RTSP sources, and fullscreen operation; fixed
+  captured photo colors in View. Agent now accepts image questions from files,
+  camera streams, RTSP and pipeline results.
+  Added Python and Lua Agent APIs for text, images, and stored WAV/MP3 audio
+  questions, provider settings, and saved conversations. Audio input uses an
+  audio-capable Chat Completions model. Added Himax model programming, slot
+  selection, persistent slot inventory, and camera-bound inference pipelines.
+  Zoo now organizes models by target and supports offline inventory management.
+  USB mode switching now includes an off mode that releases exposed data pins
+  for general I/O. Fixed native USB serial enumeration when restoring device
+  mode. Improved full-panel media and emotion rendering, SPD2010 refresh
+  performance, and Python cleanup during cancellation. Reduced memory use
+  during shell completion and after closing port shells.
+- **4.17.12** — 2026-11-13 — Added Seeed Studio reTerminal E1003 support
+  with its 10.3-inch grayscale e-paper display, touch, microSD, microphone,
+  buzzer, battery and charger monitoring, RTC, and temperature/humidity sensor.
+  Added M5Stack Paper Mono support with e-paper, touch, frontlight, LoRa, NFC,
+  RTC, IMU, microSD, microphone, buzzer, battery and charger. Long-pressing
+  Button B shuts Paper Mono down cleanly. Improved Fastwave e-paper
+  responsiveness with automatic refresh pacing, black and white redrive controls, and
+  optional timed cleanup. E1003 graphics refreshes now run in the background
+  and avoid redundant full refreshes when switching between terminal and
+  graphics. Added TLS 1.3 support for HTTPS clients. Fixed saved profiles and
+  history not loading from built-in SPI microSD cards at startup. Storage now
+  clearly identifies unrecognized internal flash filesystems, and Messages
+  explains sends refused for untrusted or blocked contacts. Fixed SX1262 LoRa
+  low-data-rate optimization and reception after fast tuning; added a manual
+  low-data-rate optimization setting. PDM microphones with power control now
+  power down when idle.
+- **4.17.11** — 2026-11-13 — Added Git version control for small projects,
+  with SSH authentication, anonymous HTTPS cloning, branches, diffs and remote
+  synchronization. Git shows live progress and uses less internal RAM. New SSH
+  keys default to 3072-bit RSA. Fixed PS/2 keyboard job startup.
+- **4.17.10** — 2026-11-11 — Added USB hub support, report-protocol
+  keyboards, and USB serial connections for CDC-ACM, Espressif native USB,
+  CP210x, and CH340/CH341 devices. Flash can now program ESP boards over USB
+  serial and cache firmware on mounted SD cards or USB drives; fixed USB
+  programming timeouts. Enabled the Freenove 4.0-inch onboard RGB LED as
+  `pixels0`, and expanded the I/O app's Pins view to show onboard pin ownership.
+  Improved Wi-Fi reliability during video capture on GOOUUU ESP32-S3CAM;
+  cameras no longer remain active after shutdown or a failed start. Fixed
+  SolarWriter USB host startup and automatic USB peripheral power switching.
+  Reduced internal RAM use on SolarWriter, CrowPanel, SolarTerm and supported
+  color and e-paper display boards, leaving more memory available for apps.
+- **4.17.9** — 2026-11-10 — Expanded USB host support to ESP32-S3 targets
+  with accessible native USB data lines. Added one FAT12/16/32 USB flash or
+  UFI/CBI floppy drive at `/usb0`, with automatic mounting, removable-media
+  detection, and safe unmounting. Shell path completion now includes mounted
+  volume roots such as `/usb0/`. External 5 V peripheral power is required.
+  Player, WebRadio, VPlay, and RTSP now share M3U/M3U8 playlists; existing Player
+  and WebRadio lists migrate automatically. VPlay and RTSP add saved playlists,
+  in-app entry management, and Tab navigation; launching either without arguments
+  opens its playlist. RTSP adds local live pause, and WebRadio advances after
+  finite MP3 playback. All four players save their own volume on exit; Player
+  and WebRadio also restore their visualization. Added reusable ICS-43432 audio
+  expansion support and updated SolarWriter for its v0.1 I/O board, including
+  microphone, shared line/speaker output, battery gauge, RTC, and audio power
+  enabled by default. Writerdeck now omits the screen keyboard, Bridge/DAQ,
+  IRC, legacy gateway services, and speech synthesis. Refreshed the user manuals.
+- **4.17.8** — 2026-11-08 — Added GPIO matrix keyboard and GC9A01 SPI
+  display expansion support. Added runtime USB host mode for keyboards,
+  relative mice and standard HID joysticks/gamepads on SolarTerm and ESP32-S3
+  DevKitC-1 N16R8, with external 5 V peripheral power. Added mouse and joystick
+  report descriptor decoding and USB device/protocol diagnostics. Game Boy now
+  automatically detects joysticks and supports axes, hats and buttons with a
+  stick dead zone and hot-plug handling. Reduced USB host internal SRAM use
+  by 5.4 KiB by moving HID state to PSRAM. Fixed SDK allocation fallback to
+  prefer managed PSRAM before consuming internal SRAM.
+- **4.17.7** — 2026-11-07 — Added MPU6050 expansion support and shared
+  IMU streams with timestamped, multi-axis `stream echo` output. Added URDF
+  device-to-frame bindings with shell and Python/Lua lookups. Robot model
+  transforms now follow live encoder feedback for continuous joints. The
+  package manager now opens a saved signed catalog, groups modules into
+  folders, and shows confirmation, progress and result popups. Added
+  `osc send` for one to eight numeric values in a single message, with
+  optional periodic sending. Added SSD1680 expansion support for 122x250
+  monochrome e-paper displays with rotation, partial/full refresh and automatic
+  cleanup. Fixed manual tables to preserve command alternatives and wrap long
+  cell text. Added global CLI/TUI cursor settings with block or underscore
+  shapes and blinking or steady modes; the default is a blinking block.
+- **4.17.6** — 2026-11-06 — Added URDF robot models, transform queries,
+  hardware bindings and explicit robot start/stop controls. Robot joints now use
+  OS controllers and scaled motor/encoder streams. Added differential-drive
+  command conversion and wheel-feedback odometry configured through URDF.
+  Added automatic PID tuning, controller setpoint streams and servo command
+  streams; servo angles now use radians. Added live scalar `stream echo`,
+  periodic writes to multiple streams and incoming OSC bindings that map
+  message arguments to scalar streams. Improved encoder-status freshness,
+  control and robot command completion, and URDF validation errors. Restored
+  OV5640 capture, improved RTSP streaming reliability and added runtime camera
+  orientation controls. Added Mac pointer controls and shell completion.
+  Fixed return to external display shells and repeated PCF8563 error logging.
+  Enabled runtime GPIO/PWM on GOOUUU GPIO2/3/45/46 and explicitly enabled
+  Sticky battery charging at boot.
 - **4.17.5** — 2026-11-02 — Added a screen keyboard overlay with full,
   symbols, and compact T-Deck punctuation modes, touch and arrow-key navigation,
   and configurable key or edge-swipe activation. Keyboard overlays preserve

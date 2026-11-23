@@ -17,6 +17,11 @@ typedef enum {
 } solar_os_terminal_font_t;
 
 typedef enum {
+    SOLAR_OS_TERMINAL_CURSOR_BLOCK,
+    SOLAR_OS_TERMINAL_CURSOR_UNDERSCORE,
+} solar_os_terminal_cursor_shape_t;
+
+typedef enum {
     SOLAR_OS_TERMINAL_TEXT_SIZE_14 = 0,
     SOLAR_OS_TERMINAL_TEXT_SIZE_20 = 1,
     SOLAR_OS_TERMINAL_TEXT_SIZE_12 = 2,
@@ -42,6 +47,7 @@ typedef struct {
     uint8_t battery_percent;
     bool battery_external_power;
     uint8_t keyboard_count;
+    char keyboard_layout[3];
     bool bluetooth_supported;
     bool bluetooth_enabled;
     bool bluetooth_scanning;
@@ -108,6 +114,17 @@ size_t solar_os_terminal_cols(const solar_os_terminal_t *terminal);
 void solar_os_terminal_set_cursor(solar_os_terminal_t *terminal, size_t row, size_t col);
 void solar_os_terminal_set_cursor_visible(solar_os_terminal_t *terminal, bool visible);
 bool solar_os_terminal_cursor_visible(const solar_os_terminal_t *terminal);
+/* Shared, persistent preference for all local terminal sessions. Visibility
+ * remains app-owned; blinking never changes the requested visibility.
+ * Without a saved choice, query the primary display's default: block/steady
+ * on e-paper, block/blink otherwise. */
+void solar_os_terminal_get_cursor_preference(solar_os_terminal_cursor_shape_t *shape,
+                                              bool *blink);
+esp_err_t solar_os_terminal_set_cursor_preference(solar_os_terminal_cursor_shape_t shape,
+                                                  bool blink);
+const char *solar_os_terminal_cursor_shape_name(solar_os_terminal_cursor_shape_t shape);
+bool solar_os_terminal_parse_cursor_shape(const char *name,
+                                          solar_os_terminal_cursor_shape_t *shape);
 void solar_os_terminal_clear_primitives(solar_os_terminal_t *terminal);
 esp_err_t solar_os_terminal_add_vrule(solar_os_terminal_t *terminal,
                                       size_t row,

@@ -9,7 +9,7 @@ agent_reference_sections = true
 +++
 # Native media and inference
 
-[Native ELF modules](commands.md#native-elf-modules) · [Computer vision](vision.md) · [Model inference](inference.md)
+[Native ELF modules](native-modules.md) · [Computer vision](vision.md) · [Model inference](inference.md)
 
 Native ELF applications and resident job modules discover host-owned services
 through a versioned function table. They compile against public headers in
@@ -62,7 +62,7 @@ Raw allocations keep fixed addresses. Optional `buffer_create`, `buffer_pin`,
 `buffer_unpin` and `buffer_destroy` fields provide movable buffers: check the
 table's `struct_size` before calling them. Retain a returned pointer only while
 pinned, balance every pin, and destroy handles before module unload. Destruction
-returns false while a pin is outstanding. See [memory policy](../memory-policy.md).
+returns false while a pin is outstanding. See [memory policy](https://github.com/nilseuropa/solar_os/blob/main/doc/memory-policy.md).
 
 ## Images and video
 

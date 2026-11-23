@@ -27,6 +27,9 @@
 #include "freertos/task.h"
 #include "nvs.h"
 #include "solar_os_app_registry.h"
+#if SOLAR_OS_PACKAGE_APP_PHOTO
+#include "solar_os_photo.h"
+#endif
 #if SOLAR_OS_PACKAGE_SERVICE_AUDIO
 #include "solar_os_audio.h"
 #endif
@@ -126,8 +129,8 @@
 #include "solar_os_wifi.h"
 #endif
 
-#define SHELL_INPUT_MAX 192
-#define SHELL_ARG_MAX 20
+#define SHELL_INPUT_MAX SOLAR_OS_SHELL_COMMAND_LINE_MAX
+#define SHELL_ARG_MAX SOLAR_OS_SHELL_COMMAND_ARG_MAX
 #define SHELL_PATH_MAX SOLAR_OS_STORAGE_PATH_MAX
 #define SHELL_HISTORY_LEN 12
 #define SHELL_STATE_DIR ".shell"
@@ -229,6 +232,7 @@ typedef enum {
     SHELL_COMPLETION_SOURCE_SCHEDULE_ENTRIES,
     SHELL_COMPLETION_SOURCE_CONTROLS,
     SHELL_COMPLETION_SOURCE_CONTROLLERS,
+    SHELL_COMPLETION_SOURCE_CONTROLLER_TARGETS,
     SHELL_COMPLETION_SOURCE_ROBOT_JOINTS,
     SHELL_COMPLETION_SOURCE_PARAMETERS,
     SHELL_COMPLETION_SOURCE_WIFI_SSIDS,
@@ -239,6 +243,7 @@ enum {
     SHELL_COMPLETION_FLAG_DIRS_ONLY = 1U << 1,
     SHELL_COMPLETION_FLAG_SCALAR_STREAMS = 1U << 2,
     SHELL_COMPLETION_FLAG_ABSOLUTE_POINTERS = 1U << 3,
+    SHELL_COMPLETION_FLAG_SCALAR_SINKS = 1U << 4,
 };
 
 typedef struct {
@@ -570,6 +575,9 @@ static const shell_command_t shell_builtin_commands[] = {
 #if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
     {"load", "run a native ELF module", solar_os_shell_cmd_load},
 #endif
+#if SOLAR_OS_PACKAGE_APP_CC
+    {"cc", "compile native C applications", solar_os_shell_cmd_cc},
+#endif
     {"board", "show board capabilities", solar_os_shell_cmd_board},
     {"identity", "show or configure device identity", solar_os_shell_cmd_identity},
     {"input", "show input sources", solar_os_shell_cmd_input},
@@ -601,7 +609,7 @@ static const shell_command_t shell_builtin_commands[] = {
     {"mem", "show free memory", solar_os_shell_cmd_mem},
     {"nvs", "inspect or erase persistent settings", solar_os_shell_cmd_nvs},
     {"ramfs", "PSRAM-backed volatile filesystem", solar_os_shell_cmd_ramfs},
-    {"stream", "list data streams", solar_os_shell_cmd_stream},
+    {"stream", "inspect data streams", solar_os_shell_cmd_stream},
 #if SOLAR_OS_PACKAGE_SERVICE_INFERENCE
     {"model", "manage resident inference models", solar_os_shell_cmd_model},
 #endif
@@ -657,6 +665,9 @@ static const shell_command_t shell_builtin_commands[] = {
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_CAMERA
     {"camera", "camera status and JPEG capture", solar_os_shell_cmd_camera},
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_USB_HOST
+    {"usb", "USB off/device/host mode and peripherals", solar_os_shell_cmd_usb},
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ADC
     {"adc", "read expansion analog inputs", solar_os_shell_cmd_adc},
@@ -783,6 +794,9 @@ static const shell_command_t shell_builtin_commands[] = {
 #if SOLAR_OS_PACKAGE_SERVICE_SSH
     {"sshkey", "manage SSH keys", solar_os_shell_cmd_sshkey},
 #endif
+#if SOLAR_OS_PACKAGE_SERVICE_GIT
+    {"git", "version control for user projects", solar_os_shell_cmd_git},
+#endif
 #if SOLAR_OS_PACKAGE_SERVICE_SENSORS
     {"temperature", "read SHTC3 temperature", solar_os_shell_cmd_temperature},
     {"humidity", "read SHTC3 humidity", solar_os_shell_cmd_humidity},
@@ -826,16 +840,20 @@ static const char * const setterm_display_settings[] = {
 };
 
 static const char * const display_orientation_values[] = {"0", "90", "180", "270"};
+static const char * const display_canvas_values[] = {"default", "full"};
 static const char * const display_scale_values[] = {"1", "2", "3", "4"};
 static const char * const setterm_font_values[] = {"mono", "compact"};
+static const char * const setterm_font_pack_values[] = {"mono", "compact", "load", "unload"};
 static const char * const setterm_textsize_values[] = {"8", "10", "12", "14", "16", "18", "20"};
+static const char * const setterm_cursor_shapes[] = {"block", "underscore"};
+static const char * const setterm_cursor_modes[] = {"blink", "steady"};
 static const char * const setterm_palette_values[] = {"normal", "inverted"};
 static const char * const setterm_statusbar_values[] = {"show", "hide"};
 static const char * const setterm_brightness_values[] = {"0", "25", "50", "75", "100"};
 static const char * const setterm_backlight_values[] = {"0", "25", "50", "75", "100", "follow"};
 static const char * const setterm_profile_values[] = {"vt100", "ansi", "dumb"};
 static const char * const setterm_charset_values[] = {"utf8", "ascii"};
-static const char * const setterm_keyboard_values[] = {"us", "de"};
+static const char * const setterm_keyboard_values[] = {"us", "de", "ua", "fr", "ro", "us,ua"};
 #if SOLAR_OS_PACKAGE_SERVICE_BLE
 static const char * const setterm_ble_values[] = {"default", "on", "off"};
 #endif
@@ -875,6 +893,8 @@ static const char * const engine_subcommands[] = {"status", "list", "reset"};
 #endif
 static const char * const mem_subcommands[] = {"policy", "reclaim", "compact", "owners"};
 #if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+static const char * const cc_subcommands[] = {"build", "sdk"};
+static const char * const cc_sdk_subcommands[] = {"list", "show", "export"};
 static const char * const pkg_subcommands[] = {
     "system", "available", "installed", "install", "remove", "unload",
 };
@@ -1134,17 +1154,21 @@ static const char * const control_parameter_subcommands[] = {"get", "set"};
 #if SOLAR_OS_PACKAGE_SERVICE_CONTROLLERS
 static const char * const controller_subcommands[] = {
     "list", "status", "create", "delete", "configure", "bind", "feed", "step",
-    "manual", "auto", "reset", "start", "stop",
+    "manual", "auto", "reset", "start", "stop", "tune",
 };
 static const char * const controller_kinds[] = {"pid", "hysteresis"};
 static const char * const controller_keys[] = {
     "setpoint", "setpoint_min", "setpoint_max", "kp", "ki", "kd", "tau", "output_min", "output_max",
     "hysteresis", "max_dt", "reverse", "safe_output", "period_ms", "timeout_ms", "frequency_hz",
+    "command_timeout_ms", "acceleration_limit", "velocity_deadband", "friction_bias_forward", "friction_bias_reverse",
 };
 static const char * const controller_sources[] = {"manual"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ROBOT
-static const char * const robot_domains[] = {"joint"};
+static const char * const robot_domains[] = {"joint", "model", "start", "stop"};
+static const char * const robot_model_subcommands[] = {
+    "load", "unload", "info", "links", "joints", "metadata", "set", "transform", "point", "vector", "devices", "frame",
+};
 static const char * const robot_joint_subcommands[] = {"list","status","create","configure","motor","servo","command","enable","disable","close"};
 static const char * const robot_kinds[] = {"velocity","servo"};
 static const char * const robot_keys[] = {"ppr","gear_ratio","motor_polarity","encoder_polarity","encoder_on_output",
@@ -1195,7 +1219,8 @@ static const char * const charger_subcommands[] = {
 };
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_CAMERA
-static const char * const camera_subcommands[] = {"status", "capture", "off"};
+static const char * const camera_subcommands[] = {"status", "resolutions", "capture", "orientation", "off"};
+static const char * const camera_orientation_values[] = {"normal", "mirror", "flip", "180"};
 static const char * const camera_frame_sizes[] = {"qvga", "vga"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_IMU
@@ -1215,16 +1240,19 @@ static const char * const neopixel_subcommands[] = {
 };
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_MOTOR
-static const char * const motor_subcommands[] = {"list", "status", "drive", "coast", "brake", "clear"};
+static const char * const motor_subcommands[] = {"list", "status", "drive", "coast", "brake", "clear", "configure"};
+static const char * const motor_keys[] = {"polarity","max_drive","brake"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ENCODER
-static const char * const encoder_subcommands[] = {"list", "status", "read", "reset"};
+static const char * const encoder_subcommands[] = {"list", "status", "read", "reset", "configure"};
+static const char * const encoder_keys[] = {"ppr","gear_ratio","polarity","encoder_on_output","velocity_tau","position_zero"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_OSC
 static const char * const osc_subcommands[] = {
-    "bindings", "bind", "unbind", "clear",
+    "bindings", "bind", "unbind", "clear", "send",
 };
-static const char * const osc_source_types[] = {"stream", "control"};
+static const char * const osc_source_types[] = {"stream", "control", "receive"};
+static const char * const osc_receive_options[] = {"arg=0","arg=1","arg=2","arg=3","arg=4","arg=5","arg=6","arg=7"};
 #endif
 
 static const char * const radio_subcommands[] = {
@@ -1359,6 +1387,16 @@ static const char * const uart_subcommands[] = {
 };
 
 static const char * const uart_mode_values[] = {"raw", "line"};
+#if SOLAR_OS_PACKAGE_SERVICE_USB_HOST
+static const char * const usb_subcommands[] = {"status", "devices", "mode",
+#if SOLAR_OS_PACKAGE_SERVICE_USB_SERIAL
+    "serial",
+#endif
+};
+static const char * const usb_modes[] = {"off", "device", "host"};
+static const char * const path_usb[] = {"usb"};
+static const char * const path_usb_mode[] = {"usb", "mode"};
+#endif
 static const char * const uart_baud_values[] = {"9600", "115200", "230400", "921600"};
 static const char * const uart_read_ms_values[] = {"0", "100", "500", "1000"};
 
@@ -1601,6 +1639,7 @@ static const char * const battery_subcommands[] = {
     "status",
     "config",
     "capacity",
+    "runtime",
     "min_voltage",
     "max_voltage",
 };
@@ -1646,6 +1685,15 @@ static const char * const say_speed_values[] = {
 
 static const char * const sshkey_gen_values[] = {"-f", "2048", "3072", "4096"};
 static const char * const sshkey_bits_values[] = {"2048", "3072", "4096"};
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_GIT
+static const char * const git_subcommands[] = {
+    "help", "init", "clone", "config", "status", "add", "diff", "commit", "log",
+    "branch", "checkout", "switch", "remote", "fetch", "pull", "push",
+};
+static const char * const git_config_keys[] = {"user.name", "user.email"};
+static const char * const git_remote_commands[] = {"-v", "add", "set-url"};
+static const char * const git_diff_options[] = {"--cached"};
 #endif
 
 #if SOLAR_OS_PACKAGE_SERVICE_OTA
@@ -1753,7 +1801,7 @@ static const char * const playground_target_values[] = {"auto", "flash", "sd"};
 static const char * const playground_storage_values[] = {"flash", "sd"};
 #endif
 #if SOLAR_OS_PACKAGE_APP_ZOO
-static const char * const zoo_subcommands[] = {"refresh", "source", "storage", "install"};
+static const char * const zoo_subcommands[] = {"refresh", "source", "storage", "installed", "install", "remove"};
 static const char * const zoo_source_values[] = {"reset"};
 static const char * const zoo_storage_values[] = {"sd", "flash"};
 #endif
@@ -1762,6 +1810,14 @@ static const char * const view_options[] = {"-fit", "-actual"};
 #endif
 #if SOLAR_OS_PACKAGE_APP_VPLAY
 static const char * const vplay_options[] = {"-fit", "-actual"};
+#endif
+#if SOLAR_OS_PACKAGE_APP_RTSP
+static const char * const rtsp_options[] = {"--audio-only", "--stats"};
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+static const char * const mac_options[] = {"--pointer-speed"};
+static const char * const mac_media_options[] = {"--floppy", "--pointer-speed"};
+static const char * const mac_pointer_speed_values[] = {"1", "2", "5", "10"};
 #endif
 #if SOLAR_OS_PACKAGE_APP_PLOT
 static const char * const plot_options[] = {"-f", "--file", "--rate"};
@@ -1886,6 +1942,19 @@ static const char * const path_view_after_option[] = {"view", SHELL_COMPLETION_A
 static const char * const path_vplay[] = {"vplay"};
 static const char * const path_vplay_after_option[] = {"vplay", SHELL_COMPLETION_ANY};
 #endif
+#if SOLAR_OS_PACKAGE_APP_RTSP
+static const char * const path_rtsp[] = {"rtsp"};
+static const char * const path_rtsp_after_option[] = {"rtsp", SHELL_COMPLETION_ANY};
+static const char * const path_rtsp_after_options[] = {"rtsp", SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY};
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+static const char * const path_mac[] = {"mac"};
+static const char * const path_mac_after_rom[] = {"mac", SHELL_COMPLETION_ANY};
+static const char * const path_mac_floppy[] = {"mac", SHELL_COMPLETION_ANY, "--floppy"};
+static const char * const path_mac_after_disk[] = {"mac", SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY};
+static const char * const path_mac_after_floppy[] = {"mac", SHELL_COMPLETION_ANY, "--floppy", SHELL_COMPLETION_ANY};
+static const char * const path_mac_pointer_speed[] = {"mac", "--pointer-speed"};
+#endif
 #if SOLAR_OS_PACKAGE_APP_FILES
 static const char * const path_files[] = {"files"};
 static const char * const path_files_launcher[] = {"files", "--launcher"};
@@ -1940,6 +2009,8 @@ static const char * const path_setterm_scale[] = {"setterm", "scale"};
 static const char * const path_setterm_display_scale[] = {"setterm", "--display", SHELL_COMPLETION_ANY, "scale"};
 static const char * const path_setterm_font[] = {"setterm", "font"};
 static const char * const path_setterm_textsize[] = {"setterm", "textsize"};
+static const char * const path_setterm_cursor[] = {"setterm", "cursor"};
+static const char * const path_setterm_cursor_mode[] = {"setterm", "cursor", SHELL_COMPLETION_ANY};
 static const char * const path_setterm_palette[] = {"setterm", "palette"};
 static const char * const path_setterm_statusbar[] = {"setterm", "statusbar"};
 static const char * const path_setterm_brightness[] = {"setterm", "brightness"};
@@ -1974,6 +2045,8 @@ static const char * const path_display_test[] = {"display", "test"};
 static const char * const path_display_mode[] = {"display", "mode"};
 static const char * const path_display_orientation[] = {"display", "orientation"};
 static const char * const path_display_scale[] = {"display", "scale"};
+static const char * const path_display_canvas[] = {"display", "canvas"};
+static const char * const path_display_canvas_target[] = {"display", "canvas", SHELL_COMPLETION_ANY};
 static const char * const path_display_orientation_target[] = {"display", "orientation", SHELL_COMPLETION_ANY};
 static const char * const path_display_scale_target[] = {"display", "scale", SHELL_COMPLETION_ANY};
 static const char * const path_display_relax[] = {"display", "relax"};
@@ -2067,6 +2140,9 @@ static const char * const path_email[] = {"email"};
 #endif
 #if SOLAR_OS_PACKAGE_APP_AGENT
 static const char * const path_agent[] = {"agent"};
+static const char * const path_agent_ask[] = {"agent", "ask"};
+static const char * const path_agent_tts_ask[] = {"agent", "--tts", "ask"};
+static const char * const agent_ask_options[] = {"--image"};
 static const char * const path_agent_resume[] = {"agent", "resume"};
 static const char * const path_agent_delete[] = {"agent", "delete"};
 static const char * const path_agent_config[] = {"agent", "config"};
@@ -2103,6 +2179,10 @@ static const char * const path_mem[] = {"mem"};
 static const char * const path_pkg[] = {"pkg"};
 #if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
 static const char * const path_pkg_install[] = {"pkg", "install"};
+static const char * const path_cc[] = {"cc"};
+static const char * const path_cc_build[] = {"cc", "build"};
+static const char * const path_cc_sdk[] = {"cc", "sdk"};
+static const char * const path_cc_sdk_export[] = {"cc", "sdk", "export"};
 static const char * const path_pkg_remove[] = {"pkg", "remove"};
 static const char * const path_pkg_unload[] = {"pkg", "unload"};
 #endif
@@ -2366,6 +2446,9 @@ static const char * const path_session_send[] = {"session", "send"};
 static const char * const path_session_focus[] = {"session", "focus"};
 static const char * const path_stream[] = {"stream"};
 static const char * const path_stream_status[] = {"stream", "status"};
+static const char * const path_stream_echo[] = {"stream", "echo"};
+static const char * const path_stream_echo_options[] = {"stream", "echo", SHELL_COMPLETION_ANY};
+static const char * const stream_echo_options[] = {"--once", "--rate"};
 #if SOLAR_OS_PACKAGE_SERVICE_BLE_STREAM
 static const char * const path_stream_ble[] = {"stream", "ble"};
 static const char * const path_stream_ble_status[] = {"stream", "ble", "status"};
@@ -2662,7 +2745,11 @@ static const char * const path_charger[] = {"charger"};
 static const char * const path_charger_enable[] = {"charger", "enable"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_INFERENCE
-static const char * const model_subcommands[] = {"backend", "list", "load", "bundle", "info", "mode", "unload"};
+static const char * const model_subcommands[] = {"backend", "list", "load", "bundle", "info", "mode", "unload",
+#if SOLAR_OS_PACKAGE_JOB_MODEL_UPLOAD
+    "slots", "select", "upload",
+#endif
+};
 static const char * const model_modes[] = {"single", "auto", "dual"};
 static const char * const model_unload_values[] = {"all"};
 static const char * const path_model[] = {"model"};
@@ -2670,15 +2757,26 @@ static const char * const path_model_load[] = {"model", "load"};
 static const char * const path_model_bundle[] = {"model", "bundle"};
 static const char * const path_model_mode_handle[] = {"model", "mode", SHELL_COMPLETION_ANY};
 static const char * const path_model_unload[] = {"model", "unload"};
+#if SOLAR_OS_PACKAGE_JOB_MODEL_UPLOAD
+static const char * const model_processors[] = {"himax"};
+static const char * const path_model_select[] = {"model", "select"};
+static const char * const path_model_slots[] = {"model", "slots"};
+static const char * const path_model_upload[] = {"model", "upload"};
+static const char * const path_model_upload_bundle[] = {"model", "upload", SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY};
+static const char * const path_model_upload_options[] = {"model", "upload", SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY};
+static const char * const model_upload_options[] = {"--replace"};
+#endif
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_PIPELINE
-static const char * const pipeline_subcommands[] = {"list", "start", "status", "result", "stop", "destroy"};
-static const char * const pipeline_processors[] = {"qr", "model"};
+static const char * const pipeline_subcommands[] = {"list", "info", "start", "status", "result", "stop", "destroy"};
+static const char * const pipeline_processors[] = {"qr", "model", "himax"};
 static const char * const path_pipeline[] = {"pipeline"};
 static const char * const path_pipeline_start[] = {"pipeline", "start"};
+static const char * const path_pipeline_info[] = {"pipeline", "info"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_CAMERA
 static const char * const path_camera[] = {"camera"};
+static const char * const path_camera_orientation[] = {"camera", "orientation"};
 static const char * const path_camera_capture[] = {"camera", "capture"};
 static const char * const path_camera_capture_file[] = {
     "camera", "capture", SHELL_COMPLETION_ANY,
@@ -2711,6 +2809,8 @@ static const char * const path_control_get[] = {"control", "get"};
 static const char * const path_control_set[] = {"control", "set"};
 static const char * const path_control_unbind[] = {"control", "unbind"};
 static const char * const path_control_parameter[] = {"control", "parameter"};
+static const char * const path_control_parameter_get[] = {"control", "parameter", "get"};
+static const char * const path_control_parameter_set[] = {"control", "parameter", "set"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_OSC
 static const char * const path_osc[] = {"osc"};
@@ -2723,6 +2823,8 @@ static const char * const path_osc_bind_stream[] = {
 static const char * const path_osc_bind_control[] = {
     "osc", "bind", SHELL_COMPLETION_ANY, "control"
 };
+static const char * const path_osc_bind_receive[] = {"osc","bind",SHELL_COMPLETION_ANY,"receive"};
+static const char * const path_osc_receive_options[] = {"osc","bind",SHELL_COMPLETION_ANY,"receive",SHELL_COMPLETION_ANY,SHELL_COMPLETION_ANY};
 #endif
 #if SOLAR_OS_PACKAGE_EXPANSION_NEOPIXEL
 static const char * const path_neopixel[] = {"neopixel"};
@@ -2740,12 +2842,16 @@ static const char * const path_motor_drive[] = {"motor", "drive"};
 static const char * const path_motor_coast[] = {"motor", "coast"};
 static const char * const path_motor_brake[] = {"motor", "brake"};
 static const char * const path_motor_clear[] = {"motor", "clear"};
+static const char * const path_motor_configure[] = {"motor","configure"};
+static const char * const path_motor_configure_key[] = {"motor","configure",SHELL_COMPLETION_ANY};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ENCODER
 static const char * const path_encoder[] = {"encoder"};
 static const char * const path_encoder_status[] = {"encoder", "status"};
 static const char * const path_encoder_read[] = {"encoder", "read"};
 static const char * const path_encoder_reset[] = {"encoder", "reset"};
+static const char * const path_encoder_configure[] = {"encoder","configure"};
+static const char * const path_encoder_configure_key[] = {"encoder","configure",SHELL_COMPLETION_ANY};
 #endif
 static const char * const path_radio[] = {"radio"};
 static const char * const path_radio_status[] = {"radio", "status"};
@@ -2854,6 +2960,14 @@ static const char * const path_say_file[] = {"say", "--file"};
 static const char * const path_sshkey[] = {"sshkey"};
 static const char * const path_sshkey_gen[] = {"sshkey", "gen"};
 static const char * const path_sshkey_gen_force[] = {"sshkey", "gen", "-f"};
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_GIT
+static const char * const path_git[] = {"git"};
+static const char * const path_git_config[] = {"git", "config"};
+static const char * const path_git_remote[] = {"git", "remote"};
+static const char * const path_git_diff[] = {"git", "diff"};
+static const char * const path_git_init[] = {"git", "init"};
+static const char * const path_git_add[] = {"git", "add"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_OTA
 static const char * const path_ota[] = {"ota"};
@@ -3186,6 +3300,13 @@ static const char * const path_ota_boot[] = {"ota", "boot"};
         .source = SHELL_COMPLETION_SOURCE_STREAMS, \
         .flags = SHELL_COMPLETION_FLAG_SCALAR_STREAMS, \
     }
+#define SHELL_COMPLETION_SCALAR_SINKS(path_array) \
+    { \
+        .path = path_array, \
+        .path_count = SHELL_ARRAY_COUNT(path_array), \
+        .source = SHELL_COMPLETION_SOURCE_STREAMS, \
+        .flags = SHELL_COMPLETION_FLAG_SCALAR_STREAMS | SHELL_COMPLETION_FLAG_SCALAR_SINKS, \
+    }
 #define SHELL_COMPLETION_CONTROLS(path_array) \
     { \
         .path = path_array, \
@@ -3217,6 +3338,7 @@ static const char * const path_controller[] = {"controller"};
 static const char * const path_controller_kind[] = {"controller", "create", SHELL_COMPLETION_ANY};
 static const char * const path_controller_key[] = {"controller", "configure", SHELL_COMPLETION_ANY};
 static const char * const path_controller_source[] = {"controller", "bind", SHELL_COMPLETION_ANY};
+static const char * const path_controller_target[] = {"controller", "bind", SHELL_COMPLETION_ANY, SHELL_COMPLETION_ANY};
 static const char * const path_controller_status[] = {"controller", "status"};
 static const char * const path_controller_configure[] = {"controller", "configure"};
 static const char * const path_controller_bind[] = {"controller", "bind"};
@@ -3227,11 +3349,14 @@ static const char * const path_controller_auto[] = {"controller", "auto"};
 static const char * const path_controller_reset[] = {"controller", "reset"};
 static const char * const path_controller_start[] = {"controller", "start"};
 static const char * const path_controller_stop[] = {"controller", "stop"};
+static const char * const path_controller_tune[] = {"controller", "tune"};
 static const char * const path_controller_delete[] = {"controller", "delete"};
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ROBOT
 static const char * const path_robot[] = {"robot"};
 static const char * const path_robot_joint[] = {"robot","joint"};
+static const char * const path_robot_model[] = {"robot", "model"};
+static const char * const path_robot_model_load[] = {"robot", "model", "load"};
 static const char * const path_robot_kind[] = {"robot","joint","create",SHELL_COMPLETION_ANY};
 static const char * const path_robot_key[] = {"robot","joint","configure",SHELL_COMPLETION_ANY};
 static const char * const path_robot_motor_name[] = {"robot","joint","motor",SHELL_COMPLETION_ANY};
@@ -3249,6 +3374,8 @@ static const shell_completion_rule_t shell_completion_rules[] = {
 #if SOLAR_OS_PACKAGE_SERVICE_ROBOT
     SHELL_COMPLETION_STATIC(path_robot,robot_domains),
     SHELL_COMPLETION_STATIC(path_robot_joint,robot_joint_subcommands),
+    SHELL_COMPLETION_STATIC(path_robot_model, robot_model_subcommands),
+    SHELL_COMPLETION_PATH(path_robot_model_load, false),
     SHELL_COMPLETION_STATIC(path_robot_kind,robot_kinds),
     SHELL_COMPLETION_STATIC(path_robot_key,robot_keys),
     SHELL_COMPLETION_MOTOR_NAMES(path_robot_motor_name),
@@ -3268,6 +3395,7 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_STATIC(path_controller_key, controller_keys),
     SHELL_COMPLETION_STATIC(path_controller_source, controller_sources),
     SHELL_COMPLETION_SCALAR_STREAMS(path_controller_source),
+    {.path=path_controller_target,.path_count=SHELL_ARRAY_COUNT(path_controller_target),.source=SHELL_COMPLETION_SOURCE_CONTROLLER_TARGETS},
     {.path = path_controller_status, .path_count = SHELL_ARRAY_COUNT(path_controller_status), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
     {.path = path_controller_configure, .path_count = SHELL_ARRAY_COUNT(path_controller_configure), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
     {.path = path_controller_bind, .path_count = SHELL_ARRAY_COUNT(path_controller_bind), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
@@ -3278,6 +3406,7 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     {.path = path_controller_reset, .path_count = SHELL_ARRAY_COUNT(path_controller_reset), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
     {.path = path_controller_start, .path_count = SHELL_ARRAY_COUNT(path_controller_start), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
     {.path = path_controller_stop, .path_count = SHELL_ARRAY_COUNT(path_controller_stop), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
+    {.path = path_controller_tune, .path_count = SHELL_ARRAY_COUNT(path_controller_tune), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
     {.path = path_controller_delete, .path_count = SHELL_ARRAY_COUNT(path_controller_delete), .source = SHELL_COMPLETION_SOURCE_CONTROLLERS},
 #endif
     SHELL_COMPLETION_MANUAL(path_man, man_options),
@@ -3317,6 +3446,8 @@ static const shell_completion_rule_t shell_completion_rules[] = {
 #if SOLAR_OS_PACKAGE_APP_WEBRADIO
     SHELL_COMPLETION_STATIC(path_webradio, webradio_subcommands),
     SHELL_COMPLETION_STATIC(path_webradio_tui, webradio_tui_subcommands),
+    SHELL_COMPLETION_PATH(path_webradio, false),
+    SHELL_COMPLETION_PATH(path_webradio_tui, false),
 #endif
 #if SOLAR_OS_PACKAGE_APP_PLAYER
     SHELL_COMPLETION_OPTIONS(path_player, player_options),
@@ -3374,6 +3505,25 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_OPTIONS(path_vplay, vplay_options),
     SHELL_COMPLETION_PATH(path_vplay_after_option, false),
 #endif
+#if SOLAR_OS_PACKAGE_APP_RTSP
+    SHELL_COMPLETION_OPTIONS(path_rtsp, rtsp_options),
+    SHELL_COMPLETION_PATH(path_rtsp, false),
+    SHELL_COMPLETION_OPTIONS(path_rtsp_after_option, rtsp_options),
+    SHELL_COMPLETION_PATH(path_rtsp_after_option, false),
+    SHELL_COMPLETION_PATH(path_rtsp_after_options, false),
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+    SHELL_COMPLETION_OPTIONS(path_mac, mac_options),
+    SHELL_COMPLETION_PATH(path_mac, false),
+    SHELL_COMPLETION_OPTIONS(path_mac_after_rom, mac_media_options),
+    SHELL_COMPLETION_PATH(path_mac_after_rom, false),
+    SHELL_COMPLETION_PATH(path_mac_floppy, false),
+    /* A floppy image is still pending here, rather than a trailing option. */
+    {.path = path_mac_floppy, .path_count = SHELL_ARRAY_COUNT(path_mac_floppy)},
+    SHELL_COMPLETION_OPTIONS(path_mac_after_disk, mac_options),
+    SHELL_COMPLETION_OPTIONS(path_mac_after_floppy, mac_options),
+    SHELL_COMPLETION_STATIC(path_mac_pointer_speed, mac_pointer_speed_values),
+#endif
 #if SOLAR_OS_PACKAGE_APP_FILES
     SHELL_COMPLETION_OPTIONS(path_files, files_options),
     SHELL_COMPLETION_PATH(path_files, false),
@@ -3417,8 +3567,10 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_STATIC(path_setterm_orientation, display_orientation_values),
     SHELL_COMPLETION_STATIC(path_setterm_scale, display_scale_values),
     SHELL_COMPLETION_STATIC(path_setterm_display_scale, display_scale_values),
-    SHELL_COMPLETION_STATIC(path_setterm_font, setterm_font_values),
+    SHELL_COMPLETION_STATIC(path_setterm_font, setterm_font_pack_values),
     SHELL_COMPLETION_STATIC(path_setterm_textsize, setterm_textsize_values),
+    SHELL_COMPLETION_STATIC(path_setterm_cursor, setterm_cursor_shapes),
+    SHELL_COMPLETION_STATIC(path_setterm_cursor_mode, setterm_cursor_modes),
     SHELL_COMPLETION_STATIC(path_setterm_palette, setterm_palette_values),
     SHELL_COMPLETION_STATIC(path_setterm_statusbar, setterm_statusbar_values),
     SHELL_COMPLETION_STATIC(path_setterm_brightness, setterm_brightness_values),
@@ -3475,6 +3627,8 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_DISPLAY_TARGETS(path_display_mode),
     SHELL_COMPLETION_DISPLAY_TARGETS(path_display_orientation),
     SHELL_COMPLETION_DISPLAY_TARGETS(path_display_scale),
+    SHELL_COMPLETION_DISPLAY_TARGETS(path_display_canvas),
+    SHELL_COMPLETION_STATIC(path_display_canvas_target, display_canvas_values),
     SHELL_COMPLETION_STATIC(path_display_orientation_target, display_orientation_values),
     SHELL_COMPLETION_STATIC(path_display_scale_target, display_scale_values),
     SHELL_COMPLETION_DISPLAY_TARGETS(path_display_relax),
@@ -3497,14 +3651,26 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_PATH(path_model_bundle, false),
     SHELL_COMPLETION_STATIC(path_model_mode_handle, model_modes),
     SHELL_COMPLETION_STATIC(path_model_unload, model_unload_values),
+#if SOLAR_OS_PACKAGE_JOB_MODEL_UPLOAD
+    SHELL_COMPLETION_STATIC(path_model_select, model_processors),
+    SHELL_COMPLETION_STATIC(path_model_slots, model_processors),
+    SHELL_COMPLETION_STATIC(path_model_upload, model_processors),
+    SHELL_COMPLETION_PATH(path_model_upload_bundle, false),
+    SHELL_COMPLETION_STATIC(path_model_upload_options, model_upload_options),
+#endif
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_PIPELINE
     SHELL_COMPLETION_STATIC(path_pipeline, pipeline_subcommands),
     SHELL_COMPLETION_STATIC(path_pipeline_start, pipeline_processors),
+    SHELL_COMPLETION_STATIC(path_pipeline_info, pipeline_processors),
 #endif
     SHELL_COMPLETION_STATIC(path_mem, mem_subcommands),
     SHELL_COMPLETION_STATIC(path_pkg, pkg_subcommands),
 #if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+    SHELL_COMPLETION_STATIC(path_cc, cc_subcommands),
+    SHELL_COMPLETION_PATH(path_cc_build, false),
+    SHELL_COMPLETION_STATIC(path_cc_sdk, cc_sdk_subcommands),
+    SHELL_COMPLETION_PATH(path_cc_sdk_export, true),
     SHELL_COMPLETION_MODULES_AVAILABLE(path_pkg_install),
     SHELL_COMPLETION_MODULES_INSTALLED(path_pkg_remove),
     SHELL_COMPLETION_MODULES_INSTALLED(path_pkg_unload),
@@ -3657,6 +3823,8 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_DISPLAY_TARGETS(path_session_focus),
     SHELL_COMPLETION_STATIC(path_stream, stream_subcommands),
     SHELL_COMPLETION_STREAMS(path_stream_status),
+    SHELL_COMPLETION_STREAMS(path_stream_echo),
+    SHELL_COMPLETION_OPTIONS(path_stream_echo_options, stream_echo_options),
 #if SOLAR_OS_PACKAGE_SERVICE_BLE_STREAM
     SHELL_COMPLETION_STATIC(path_stream_ble, stream_ble_subcommands),
     SHELL_COMPLETION_STREAMS(path_stream_ble_status),
@@ -3823,6 +3991,8 @@ static const shell_completion_rule_t shell_completion_rules[] = {
 #endif
 #if SOLAR_OS_PACKAGE_APP_AGENT
     SHELL_COMPLETION_STATIC(path_agent, agent_subcommands),
+    SHELL_COMPLETION_OPTIONS(path_agent_ask, agent_ask_options),
+    SHELL_COMPLETION_OPTIONS(path_agent_tts_ask, agent_ask_options),
     SHELL_COMPLETION_AGENT_CONVERSATIONS(path_agent_resume),
     SHELL_COMPLETION_AGENT_CONVERSATIONS(path_agent_delete),
     SHELL_COMPLETION_STATIC(path_agent_config, agent_config_fields),
@@ -3910,8 +4080,13 @@ static const shell_completion_rule_t shell_completion_rules[] = {
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_CAMERA
     SHELL_COMPLETION_STATIC(path_camera, camera_subcommands),
+    SHELL_COMPLETION_STATIC(path_camera_orientation, camera_orientation_values),
     SHELL_COMPLETION_PATH(path_camera_capture, false),
     SHELL_COMPLETION_STATIC(path_camera_capture_file, camera_frame_sizes),
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_USB_HOST
+    SHELL_COMPLETION_STATIC(path_usb, usb_subcommands),
+    SHELL_COMPLETION_STATIC(path_usb_mode, usb_modes),
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_IMU
     SHELL_COMPLETION_STATIC(path_imu, imu_subcommands),
@@ -3936,12 +4111,16 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_CONTROLS(path_control_unbind),
     SHELL_COMPLETION_STATIC(path_control_parameter,
                             control_parameter_subcommands),
+    SHELL_COMPLETION_PARAMETERS(path_control_parameter_get),
+    SHELL_COMPLETION_PARAMETERS(path_control_parameter_set),
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_OSC
     SHELL_COMPLETION_STATIC(path_osc, osc_subcommands),
     SHELL_COMPLETION_STATIC(path_osc_bind_type, osc_source_types),
     SHELL_COMPLETION_STREAMS(path_osc_bind_stream),
     SHELL_COMPLETION_CONTROLS(path_osc_bind_control),
+    SHELL_COMPLETION_SCALAR_SINKS(path_osc_bind_receive),
+    SHELL_COMPLETION_STATIC(path_osc_receive_options,osc_receive_options),
 #endif
 #if SOLAR_OS_PACKAGE_EXPANSION_NEOPIXEL
     SHELL_COMPLETION_STATIC(path_neopixel, neopixel_subcommands),
@@ -3959,12 +4138,16 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_MOTOR_NAMES(path_motor_coast),
     SHELL_COMPLETION_MOTOR_NAMES(path_motor_brake),
     SHELL_COMPLETION_MOTOR_NAMES(path_motor_clear),
+    SHELL_COMPLETION_MOTOR_NAMES(path_motor_configure),
+    SHELL_COMPLETION_STATIC(path_motor_configure_key,motor_keys),
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_ENCODER
     SHELL_COMPLETION_STATIC(path_encoder, encoder_subcommands),
     SHELL_COMPLETION_ENCODER_NAMES(path_encoder_status),
     SHELL_COMPLETION_ENCODER_NAMES(path_encoder_read),
     SHELL_COMPLETION_ENCODER_NAMES(path_encoder_reset),
+    SHELL_COMPLETION_ENCODER_NAMES(path_encoder_configure),
+    SHELL_COMPLETION_STATIC(path_encoder_configure_key,encoder_keys),
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_RADIO
     SHELL_COMPLETION_STATIC(path_radio, radio_subcommands),
@@ -4056,6 +4239,14 @@ static const shell_completion_rule_t shell_completion_rules[] = {
     SHELL_COMPLETION_STATIC(path_sshkey, sshkey_subcommands),
     SHELL_COMPLETION_STATIC(path_sshkey_gen, sshkey_gen_values),
     SHELL_COMPLETION_STATIC(path_sshkey_gen_force, sshkey_bits_values),
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_GIT
+    SHELL_COMPLETION_STATIC(path_git, git_subcommands),
+    SHELL_COMPLETION_STATIC(path_git_config, git_config_keys),
+    SHELL_COMPLETION_STATIC(path_git_remote, git_remote_commands),
+    SHELL_COMPLETION_STATIC(path_git_diff, git_diff_options),
+    SHELL_COMPLETION_PATH(path_git_init, true),
+    SHELL_COMPLETION_PATH(path_git_add, false),
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_OTA
     SHELL_COMPLETION_STATIC(path_ota, ota_subcommands),
@@ -4161,6 +4352,7 @@ static uint16_t shell_completion_rule_next(uint16_t index, const char *command)
 #undef SHELL_COMPLETION_ENCODER_NAMES
 #undef SHELL_COMPLETION_STREAMS
 #undef SHELL_COMPLETION_SCALAR_STREAMS
+#undef SHELL_COMPLETION_SCALAR_SINKS
 #undef SHELL_COMPLETION_SPI_CS
 #undef SHELL_COMPLETION_UART_BUSES
 #undef SHELL_COMPLETION_UART_ARGUMENTS
@@ -6060,6 +6252,47 @@ static bool shell_path_entry_matches(const char *name, const char *prefix, bool 
     return starts_with(name, prefix);
 }
 
+static bool shell_path_completion_mount_entry(const shell_path_completion_work_t *work,
+                                               size_t index,
+                                               solar_os_storage_mount_info_t *mount)
+{
+    return strcmp(work->base_arg, "/") == 0 &&
+           solar_os_storage_get_mount(index, mount) &&
+           mount->mount_point[0] == '/' && mount->mount_point[1] != '\0' &&
+           strchr(mount->mount_point + 1, '/') == NULL;
+}
+
+static bool shell_path_completion_is_mount(const shell_path_completion_work_t *work,
+                                            const char *name)
+{
+    if (strcmp(work->base_arg, "/") != 0) {
+        return false;
+    }
+    solar_os_storage_mount_info_t mount;
+    for (size_t i = 0; i < solar_os_storage_mount_count(); i++) {
+        if (shell_path_completion_mount_entry(work, i, &mount) &&
+            strcmp(mount.mount_point + 1, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void shell_path_completion_add_match(shell_path_completion_work_t *work,
+                                             const char *name,
+                                             bool is_dir,
+                                             size_t *count,
+                                             bool *match_is_dir)
+{
+    if (++*count == 1) {
+        strlcpy(work->match_name, name, sizeof(work->match_name));
+        strlcpy(work->common_prefix, name, sizeof(work->common_prefix));
+        *match_is_dir = is_dir;
+    } else {
+        shell_update_common_prefix(work->common_prefix, sizeof(work->common_prefix), name);
+    }
+}
+
 static void shell_print_path_matches(solar_os_context_t *ctx,
                                      const shell_path_completion_work_t *work,
                                      const char *prefix,
@@ -6068,14 +6301,12 @@ static void shell_print_path_matches(solar_os_context_t *ctx,
 {
     solar_os_shell_io_t *io = shell_io(ctx);
     DIR *dir = opendir(work->dir_path);
-    if (dir == NULL) {
-        return;
-    }
 
     solar_os_shell_io_newline(io);
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!shell_path_entry_matches(entry->d_name, prefix, prefix_has_wildcards)) {
+    while (dir != NULL && (entry = readdir(dir)) != NULL) {
+        if (!shell_path_entry_matches(entry->d_name, prefix, prefix_has_wildcards) ||
+            shell_path_completion_is_mount(work, entry->d_name)) {
             continue;
         }
 
@@ -6086,7 +6317,17 @@ static void shell_print_path_matches(solar_os_context_t *ctx,
 
         shell_print_path_match(io, work->dir_path, entry->d_name);
     }
-    closedir(dir);
+    if (dir != NULL) {
+        closedir(dir);
+    }
+    solar_os_storage_mount_info_t mount;
+    for (size_t i = 0; i < solar_os_storage_mount_count(); i++) {
+        if (shell_path_completion_mount_entry(work, i, &mount) &&
+            shell_path_entry_matches(mount.mount_point + 1, prefix, prefix_has_wildcards)) {
+            solar_os_shell_io_write(io, mount.mount_point + 1);
+            solar_os_shell_io_write(io, "/\n");
+        }
+    }
 
     shell_prompt(ctx);
     shell_replace_input(ctx, work->original);
@@ -6137,21 +6378,19 @@ static void shell_complete_path(solar_os_context_t *ctx,
         work->base_arg[0] = '\0';
     }
 
-    if (resolve_path(ctx, dir_to_resolve, work->dir_path, sizeof(work->dir_path)) != ESP_OK) {
+    if (resolve_path(ctx, dir_to_resolve, work->dir_path, sizeof(work->dir_path)) != ESP_OK &&
+        strcmp(work->base_arg, "/") != 0) {
         solar_os_memory_free(work);
         return;
     }
 
     DIR *dir = opendir(work->dir_path);
-    if (dir == NULL) {
-        solar_os_memory_free(work);
-        return;
-    }
 
     const bool prefix_has_wildcards = shell_arg_has_wildcards(prefix);
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!shell_path_entry_matches(entry->d_name, prefix, prefix_has_wildcards)) {
+    while (dir != NULL && (entry = readdir(dir)) != NULL) {
+        if (!shell_path_entry_matches(entry->d_name, prefix, prefix_has_wildcards) ||
+            shell_path_completion_is_mount(work, entry->d_name)) {
             continue;
         }
 
@@ -6160,19 +6399,20 @@ static void shell_complete_path(solar_os_context_t *ctx,
             continue;
         }
 
-        match_count++;
-        if (match_count == 1) {
-            strlcpy(work->match_name, entry->d_name, sizeof(work->match_name));
-            strlcpy(work->common_prefix, entry->d_name, sizeof(work->common_prefix));
-            match_is_dir = entry_is_dir;
-        } else {
-            shell_update_common_prefix(work->common_prefix,
-                                       sizeof(work->common_prefix),
-                                       entry->d_name);
+        shell_path_completion_add_match(work, entry->d_name, entry_is_dir,
+                                         &match_count, &match_is_dir);
+    }
+    if (dir != NULL) {
+        closedir(dir);
+    }
+    solar_os_storage_mount_info_t mount;
+    for (size_t i = 0; i < solar_os_storage_mount_count(); i++) {
+        if (shell_path_completion_mount_entry(work, i, &mount) &&
+            shell_path_entry_matches(mount.mount_point + 1, prefix, prefix_has_wildcards)) {
+            shell_path_completion_add_match(work, mount.mount_point + 1, true,
+                                             &match_count, &match_is_dir);
         }
     }
-
-    closedir(dir);
 
     if (match_count == 0) {
         solar_os_memory_free(work);
@@ -6305,6 +6545,11 @@ static void shell_completion_emit(shell_completion_match_t *state, const char *v
         solar_os_shell_io_writeln(state->io, value);
     }
 }
+
+#if SOLAR_OS_PACKAGE_APP_PHOTO
+static void shell_photo_candidate(const char *candidate, void *user)
+{ shell_completion_emit(user, candidate); }
+#endif
 
 static bool shell_completion_alias_emit_callback(const char *name,
                                                  int argc,
@@ -7474,18 +7719,66 @@ static void shell_completion_emit_spi_cs(shell_completion_match_t *state,
 #endif
 }
 
-static void shell_completion_emit_streams(shell_completion_match_t *state, bool scalar_only)
+static void shell_completion_emit_streams(shell_completion_match_t *state, bool scalar_only, bool sinks)
 {
     const size_t count = solar_os_stream_count();
 
     for (size_t i = 0; i < count; i++) {
         solar_os_stream_info_t info;
         if (solar_os_stream_get(i, &info) &&
-            (!scalar_only || info.type == SOLAR_OS_STREAM_TYPE_SCALAR)) {
+            (!scalar_only || (info.type == SOLAR_OS_STREAM_TYPE_SCALAR &&
+                (sinks?info.direction!=SOLAR_OS_STREAM_DIRECTION_SOURCE:info.direction!=SOLAR_OS_STREAM_DIRECTION_SINK)))) {
             shell_completion_emit(state, info.id);
         }
     }
 }
+
+static bool shell_completion_emit_stream_write(shell_completion_match_t *state,
+                                               const char *const *tokens,size_t token_count)
+{
+    if(token_count<2 || strcmp(tokens[0],"stream") || strcmp(tokens[1],"write"))return false;
+    bool rate=false,duration=false;
+    for(size_t i=2;i<token_count;++i) {
+        if(!strcmp(tokens[i],"--rate") || !strcmp(tokens[i],"--duration")) {
+            bool is_rate=!strcmp(tokens[i],"--rate");
+            if((is_rate && rate) || (!is_rate && duration))return true;
+            if(is_rate)rate=true;else duration=true;
+            if(++i==token_count)return true; /* Numeric option value. */
+        } else {
+            if(!strncmp(tokens[i],"--",2) || ++i==token_count)return true; /* Scalar value. */
+        }
+    }
+    shell_completion_emit_streams(state,true,true);
+    if(!rate)shell_completion_emit(state,"--rate");
+    if(!duration)shell_completion_emit(state,"--duration");
+    return true;
+}
+
+#if SOLAR_OS_PACKAGE_SERVICE_OSC
+static bool shell_completion_emit_osc_send(shell_completion_match_t *state,
+    const char *const *tokens, size_t token_count)
+{
+    if (token_count < 2 || strcmp(tokens[0], "osc") || strcmp(tokens[1], "send")) return false;
+    if (token_count < 4) return true; /* Destination and address. */
+    bool rate = false, duration = false; size_t values = 0;
+    for (size_t i = 4; i < token_count; ++i) {
+        if (!strcmp(tokens[i], "--rate") || !strcmp(tokens[i], "--duration")) {
+            bool is_rate = !strcmp(tokens[i], "--rate");
+            if ((is_rate && rate) || (!is_rate && duration)) return true;
+            if (is_rate) rate = true; else duration = true;
+            if (++i == token_count) return true;
+        } else {
+            if (!strncmp(tokens[i], "--", 2)) return true;
+            ++values;
+        }
+    }
+    if (values) {
+        if (!rate) shell_completion_emit(state, "--rate");
+        if (!duration) shell_completion_emit(state, "--duration");
+    }
+    return true;
+}
+#endif
 
 #if SOLAR_OS_PACKAGE_APP_DLP
 static void shell_completion_emit_dlp_streams(shell_completion_match_t *state)
@@ -8679,6 +8972,54 @@ static void shell_completion_emit_rtspd_candidate(const char *candidate, void *c
 }
 #endif
 
+#if SOLAR_OS_PACKAGE_SERVICE_ROBOT
+/* Model poses and hardware controllers have separate name spaces. Completion
+ * only reads the resident model; it never loads a library or activates devices. */
+static bool shell_completion_emit_robot_model(shell_completion_match_t *state,
+                                              const char * const *tokens,
+                                              size_t token_count)
+{
+    if (token_count < 3 || strcmp(tokens[0], "robot") || strcmp(tokens[1], "model")) return false;
+    if (!strcmp(tokens[2], "frame")) {
+        if (token_count == 3) {
+            solar_os_robot_model_device_t device;
+            for (uint32_t i = 0; solar_os_robot_model_get_device(i, &device) == ESP_OK; ++i)
+                shell_completion_emit(state, device.name);
+            solar_os_stream_info_t stream; char frame[SOLAR_OS_ROBOT_MODEL_NAME_MAX];
+            for (size_t i = 0; solar_os_stream_get(i, &stream); ++i)
+                if (solar_os_robot_model_frame(stream.id, frame, sizeof(frame)) == ESP_OK)
+                    shell_completion_emit(state, stream.id);
+        }
+        return true;
+    }
+    const bool positions = strcmp(tokens[2], "set") == 0;
+    const bool frames = strcmp(tokens[2], "transform") == 0 ||
+        strcmp(tokens[2], "point") == 0 || strcmp(tokens[2], "vector") == 0;
+    if (!positions && !frames) return false;
+    /* Even counts in set await a numeric value. Frame commands take two frame
+     * names followed, for point/vector, by three numeric coordinates. */
+    if ((positions && token_count % 2 == 0) || (frames && token_count > 4)) return true;
+    solar_os_robot_model_info_t model;
+    if (solar_os_robot_model_get_info(&model) != ESP_OK) return true;
+    if (frames) {
+        for (uint32_t i = 0; i < model.links; ++i) {
+            char name[SOLAR_OS_ROBOT_MODEL_NAME_MAX];
+            if (solar_os_robot_model_get_link(i, name, sizeof(name)) == ESP_OK) shell_completion_emit(state, name);
+        }
+    } else {
+        for (uint32_t i = 0; i < model.joints; ++i) {
+            solar_os_robot_model_joint_info_t joint;
+            if (solar_os_robot_model_get_joint(i, &joint) != ESP_OK || joint.kind == SOLAR_OS_ROBOT_MODEL_FIXED) continue;
+            bool used = false;
+            for (size_t k = 3; k + 1 < token_count; k += 2)
+                if (strcmp(tokens[k], joint.name) == 0) { used = true; break; }
+            if (!used) shell_completion_emit(state, joint.name);
+        }
+    }
+    return true;
+}
+#endif
+
 static bool shell_completion_collect_matches(solar_os_context_t *ctx,
                                              const char * const *tokens,
                                              size_t token_count,
@@ -8698,6 +9039,37 @@ static bool shell_completion_collect_matches(solar_os_context_t *ctx,
     state->io = shell_io(ctx);
     state->prefix = prefix;
     state->print = print;
+
+#if SOLAR_OS_PACKAGE_APP_PHOTO
+    if (!strcmp(tokens[0], "photo")) {
+        solar_os_photo_complete(tokens, token_count, shell_photo_candidate, state);
+        return true;
+    }
+#endif
+
+#if SOLAR_OS_PACKAGE_SERVICE_USB_SERIAL
+    if (token_count >= 2 && !strcmp(tokens[0], "usb") && !strcmp(tokens[1], "serial")) {
+        if (token_count == 2) {
+            solar_os_port_info_t ports[SOLAR_OS_PORT_MAX];
+            size_t count = solar_os_port_list(ports, SOLAR_OS_PORT_MAX);
+            for (size_t i = 0; i < count && i < SOLAR_OS_PORT_MAX; i++)
+                if (ports[i].capabilities & SOLAR_OS_PORT_CAP_SERIAL) shell_completion_emit(state, ports[i].name);
+        } else {
+            static const char *options[] = {"baud=", "bits=", "parity=none", "parity=odd", "parity=even",
+                "parity=mark", "parity=space", "stop=1", "stop=1.5", "stop=2", "dtr=0", "dtr=1", "rts=0", "rts=1", "break="};
+            for (size_t i = 0; i < sizeof(options) / sizeof(options[0]); i++) shell_completion_emit(state, options[i]);
+        }
+        return true;
+    }
+#endif
+    if (shell_completion_emit_stream_write(state, tokens, token_count)) return true;
+#if SOLAR_OS_PACKAGE_SERVICE_OSC
+    if (shell_completion_emit_osc_send(state, tokens, token_count)) return true;
+#endif
+
+#if SOLAR_OS_PACKAGE_SERVICE_ROBOT
+    if (shell_completion_emit_robot_model(state, tokens, token_count)) return true;
+#endif
 
 #if SOLAR_OS_PACKAGE_JOB_RTSPD
     if (solar_os_shell_rtspd_completion_emit(tokens, token_count, prefix,
@@ -8927,7 +9299,8 @@ static bool shell_completion_collect_matches(solar_os_context_t *ctx,
         case SHELL_COMPLETION_SOURCE_STREAMS:
             shell_completion_emit_streams(
                 state,
-                (rule->flags & SHELL_COMPLETION_FLAG_SCALAR_STREAMS) != 0U);
+                (rule->flags & SHELL_COMPLETION_FLAG_SCALAR_STREAMS) != 0U,
+                (rule->flags & SHELL_COMPLETION_FLAG_SCALAR_SINKS) != 0U);
             break;
         case SHELL_COMPLETION_SOURCE_DLP_STREAMS:
 #if SOLAR_OS_PACKAGE_APP_DLP
@@ -8954,6 +9327,20 @@ static bool shell_completion_collect_matches(solar_os_context_t *ctx,
             for (size_t i=0;i<solar_os_robot_joint_count();i++) {
                 solar_os_robot_joint_info_v3_t info;
                 if (solar_os_robot_joint_get_info(i,&info)) shell_completion_emit(state,info.config.name);
+            }
+#endif
+            break;
+        case SHELL_COMPLETION_SOURCE_CONTROLLER_TARGETS:
+#if SOLAR_OS_PACKAGE_SERVICE_CONTROLLERS
+            shell_completion_emit(state,"parameter:");shell_completion_emit(state,"pwm:");
+            for(size_t i=0;i<solar_os_stream_count();++i) {
+                solar_os_stream_info_t info;
+                if(solar_os_stream_get(i,&info) && info.type==SOLAR_OS_STREAM_TYPE_SCALAR &&
+                    info.direction!=SOLAR_OS_STREAM_DIRECTION_SOURCE && !strcmp(info.format,"f32") &&
+                    strncmp(info.id,"controller.",11)) {
+                    char name[SOLAR_OS_STREAM_ID_MAX+8];snprintf(name,sizeof(name),"stream:%s",info.id);
+                    shell_completion_emit(state,name);
+                }
             }
 #endif
             break;
@@ -9019,22 +9406,51 @@ static void shell_print_argument_completion_matches(solar_os_context_t *ctx,
     shell_replace_input(ctx, original);
 }
 
-static bool shell_complete_argument(solar_os_context_t *ctx,
+#if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+/* Keep ROM/media completion positions independent of the optional speed pair.
+ * A pending speed value uses its exact rule and must not fall back to paths. */
+static bool shell_completion_normalize_mac_arguments(const char **tokens, size_t *count)
+{
+    if (*count == 0 || strcmp(tokens[0], "mac") != 0) return false;
+    size_t next = 1;
+    for (size_t i = 1; i < *count; ++i) {
+        if (strcmp(tokens[i], "--pointer-speed") == 0) {
+            if (++i == *count) {
+                tokens[1] = "--pointer-speed";
+                *count = 2;
+                return true;
+            }
+        } else tokens[next++] = tokens[i];
+    }
+    *count = next;
+    return false;
+}
+#endif
+
+typedef struct {
+    const char *completed_tokens[SHELL_ARG_MAX];
+    char *alias_tokens[SHELL_ARG_MAX];
+    char effective_command[SHELL_INPUT_MAX];
+    shell_completion_match_t state;
+    char encoded_match[SHELL_INPUT_MAX];
+    char completed[SHELL_INPUT_MAX];
+} shell_argument_completion_work_t;
+
+/* Discovery can read ELF metadata below completion. Keep optional argument
+ * helpers and their scratch buffers off the display shell's main-task stack. */
+static bool SHELL_NOINLINE shell_complete_argument_with_work(solar_os_context_t *ctx,
                                     const shell_completion_parse_t *parse,
                                     size_t current_index,
                                     size_t token_start,
-                                    bool show_matches)
+                                    bool show_matches,
+                                    shell_argument_completion_work_t *work)
 {
-    const char *completed_tokens[SHELL_ARG_MAX];
-    char effective_command[SHELL_INPUT_MAX];
-    char *alias_tokens[SHELL_ARG_MAX] = {0};
+    const char **completed_tokens = work->completed_tokens;
+    char *effective_command = work->effective_command;
+    char **alias_tokens = work->alias_tokens;
     const char *prefix = "";
     size_t completed_count = current_index;
-    shell_completion_match_t state;
-
-    if (parse == NULL || parse->count == 0 || current_index >= SHELL_ARG_MAX) {
-        return false;
-    }
+    shell_completion_match_t *state = &work->state;
 
     for (size_t i = 0; i < completed_count; i++) {
         completed_tokens[i] = parse->tokens[i];
@@ -9044,7 +9460,7 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
     if (shell_completion_expand_alias(parse,
                                       completed_count,
                                       effective_command,
-                                      sizeof(effective_command),
+                                      sizeof(work->effective_command),
                                       alias_tokens,
                                       &alias_count)) {
         completed_count = alias_count;
@@ -9053,8 +9469,8 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
         }
     } else if (!shell_alias_lookup_target_command(parse->tokens[0],
                                                   effective_command,
-                                                  sizeof(effective_command))) {
-        strlcpy(effective_command, parse->tokens[0], sizeof(effective_command));
+                                                  sizeof(work->effective_command))) {
+        strlcpy(effective_command, parse->tokens[0], sizeof(work->effective_command));
     }
     if (alias_count == 0) {
         completed_tokens[0] = effective_command;
@@ -9063,6 +9479,22 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
     if (!parse->trailing_space && current_index < parse->count) {
         prefix = parse->tokens[current_index];
     }
+
+#if SOLAR_OS_PACKAGE_APP_AGENT
+    if (!strcmp(effective_command, "agent") && completed_count > 2 &&
+        !strcmp(completed_tokens[completed_count - 1], "--image") &&
+        strncmp(prefix,"stream:",7) && strncmp(prefix,"rtsp:",5) && strncmp(prefix,"pipeline:",9)) {
+        shell_complete_path(ctx, token_start, prefix, false, show_matches);
+        return true;
+    }
+#endif
+#if SOLAR_OS_PACKAGE_APP_PHOTO
+    if (!strcmp(effective_command, "photo") && completed_count > 1 &&
+        !strcmp(completed_tokens[completed_count - 1], "--dir")) {
+        shell_complete_path(ctx, token_start, prefix, true, show_matches);
+        return true;
+    }
+#endif
 
 #if SOLAR_OS_PACKAGE_SERVICE_SSH || SOLAR_OS_PACKAGE_SERVICE_NET
     if (shell_complete_ssh_host_argument(ctx,
@@ -9123,7 +9555,12 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
         return true;
     }
 
-    const shell_completion_rule_t *path_rule =
+#if SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES
+    const bool mac_speed_value = shell_completion_normalize_mac_arguments(completed_tokens, &completed_count);
+#else
+    const bool mac_speed_value = false;
+#endif
+    const shell_completion_rule_t *path_rule = mac_speed_value ? NULL :
         shell_completion_find_path_rule(completed_tokens, completed_count);
 
     const bool rule_seen = shell_completion_collect_matches(ctx,
@@ -9131,7 +9568,7 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
                                                             completed_count,
                                                             prefix,
                                                             false,
-                                                            &state);
+                                                            state);
     if (!rule_seen) {
         if (path_rule != NULL) {
             shell_complete_path(
@@ -9142,9 +9579,9 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
                 show_matches);
             return true;
         }
-        return false;
+        return mac_speed_value;
     }
-    if (state.count == 0) {
+    if (state->count == 0) {
         if (path_rule != NULL) {
             shell_complete_path(
                 ctx,
@@ -9154,40 +9591,38 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
                 show_matches);
             return true;
         }
-        return false;
+        return mac_speed_value;
     }
 
     shell_session(ctx)->history_browsing = false;
     shell_session(ctx)->history_index = -1;
 
-    char encoded_match[SHELL_INPUT_MAX];
-    const char *match = state.match;
+    const char *match = state->match;
     if (completed_count == 3 && !strcmp(completed_tokens[0], "sc2") &&
         !strcmp(completed_tokens[1], "room") && !strcmp(completed_tokens[2], "invite") &&
-        solar_os_shell_completion_encode_token(state.match, encoded_match, sizeof(encoded_match))) match = encoded_match;
+        solar_os_shell_completion_encode_token(state->match, work->encoded_match,
+            sizeof(work->encoded_match))) match = work->encoded_match;
 
-    if (state.count == 1 && !show_matches) {
-        char completed[SHELL_INPUT_MAX];
-        snprintf(completed,
-                 sizeof(completed),
+    if (state->count == 1 && !show_matches) {
+        snprintf(work->completed,
+                 sizeof(work->completed),
                  "%.*s%s%s",
                  (int)token_start,
                  shell_session(ctx)->input,
                  match,
                  solar_os_shell_completion_needs_trailing_space(match) ? " " : "");
-        shell_replace_input(ctx, completed);
+        shell_replace_input(ctx, work->completed);
         return true;
     }
 
-    if (!show_matches && strlen(state.match) > strlen(prefix)) {
-        char completed[SHELL_INPUT_MAX];
-        snprintf(completed,
-                 sizeof(completed),
+    if (!show_matches && strlen(state->match) > strlen(prefix)) {
+        snprintf(work->completed,
+                 sizeof(work->completed),
                  "%.*s%s",
                  (int)token_start,
                  shell_session(ctx)->input,
                  match);
-        shell_replace_input(ctx, completed);
+        shell_replace_input(ctx, work->completed);
         return true;
     }
 
@@ -9198,6 +9633,25 @@ static bool shell_complete_argument(solar_os_context_t *ctx,
                                                 prefix[0] == '\0' ? NULL : prefix);
     }
     return true;
+}
+
+static bool SHELL_NOINLINE shell_complete_argument(solar_os_context_t *ctx,
+                                    const shell_completion_parse_t *parse,
+                                    size_t current_index,
+                                    size_t token_start,
+                                    bool show_matches)
+{
+    if (parse == NULL || parse->count == 0 || current_index >= SHELL_ARG_MAX) {
+        return false;
+    }
+    shell_argument_completion_work_t *work = solar_os_memory_calloc(1U, sizeof(*work),
+        SOLAR_OS_MEMORY_TRANSIENT, "shell.complete");
+    /* Leave the input unchanged on allocation failure, including path fallback. */
+    if (!work) return true;
+    const bool handled = shell_complete_argument_with_work(ctx, parse, current_index,
+        token_start, show_matches, work);
+    solar_os_memory_free(work);
+    return handled;
 }
 
 static void shell_complete_command(solar_os_context_t *ctx, bool show_matches)

@@ -18,6 +18,8 @@ static void solar_os_shell_io_writeln(solar_os_shell_io_t *io,const char *text)
 { solar_os_shell_io_printf(io,"%s\n",text); }
 static const char *solar_os_shell_error_text(esp_err_t error)
 { (void)error; return "device error"; }
+static esp_err_t solar_os_shell_resolve_path(solar_os_context_t *ctx, const char *path, char *out, size_t bytes)
+{ (void)ctx;return strlcpy(out,path,bytes)<bytes?ESP_OK:ESP_ERR_INVALID_ARG; }
 
 /* SHELL_COMMAND */
 
@@ -32,13 +34,35 @@ static const char *run(const char *line)
     memset(&ctx.io,0,sizeof(ctx.io)); solar_os_shell_cmd_robot(&ctx,argc,argv);
     return ctx.io.output;
 }
+static void drive_shell_check(void)
+{
+    assert(strstr(run("robot diff_drive status base"),"usage: robot start|stop | joint|model"));
+    assert(strstr(run("robot diff_drive command base 0 0"),"usage: robot start|stop | joint|model"));
+}
 int main(void)
 {
     setup();
-    assert(strstr(run("robot"),"robot joint"));
-    assert(strstr(run("robot model create wheel"),"usage:"));
+    assert(strstr(run("robot"),"robot start|stop"));
+    assert(strstr(run("robot model create wheel"),"robot model load"));
     assert(strstr(run("robot axis list"),"usage:"));
     assert(strstr(run("robot create wheel velocity"),"usage:"));
+    assert(strstr(run("robot model load " ROBOT_MODEL_FIXTURE),"Robot model loaded"));
+    assert(strstr(run("robot model info"),"solbot: root=base_footprint links=6 joints=5 known=3"));
+    assert(strstr(run("robot model devices"),"imu0: frame=imu_link"));
+    assert(!strcmp(run("robot model frame imu0"),"imu_link\n"));
+    assert(strstr(run("robot model links"),"left_wheel_link"));
+    assert(strstr(run("robot model joints"),"position=0 known=0"));
+    assert(strstr(run("robot model transform base_footprint caster_ball_link"),"base_footprint <- caster_ball_link:"));
+    assert(strstr(run("robot model transform left_wheel_link left_wheel_link"),"quaternion-xyzw=[0 0 0 1]"));
+    assert(strstr(run("robot model transform base_link left_wheel_link"),"Joint 'left_wheel_joint' has no current position"));
+    assert(strstr(run("robot model point left_wheel_link base_link 0 0 0"),"Joint 'left_wheel_joint' has no current position"));
+    assert(!*run("robot model set left_wheel_joint 0 right_wheel_joint 0"));
+    assert(strstr(run("robot model transform base_link left_wheel_link"),"base_link <- left_wheel_link"));
+    assert(strstr(run("robot model point base_link left_wheel_link 0 0 0"),"0.035064"));
+    assert(strstr(run("robot model vector base_link left_wheel_link 1 0 0"),"[1 0 0]"));
+    assert(strstr(run("robot model load /missing.urdf"),"robot model:"));
+    assert(strstr(run("robot model info"),"solbot:"));
+    assert(!*run("robot model unload"));
     assert(!solar_os_robot_joint_count());
     assert(strstr(run("robot joint"),"robot joint configure"));
     assert(strstr(run("robot joint list"),"No joints open"));
@@ -80,6 +104,20 @@ int main(void)
     assert(s.config.servo.pulse_min_us==1000 && s.config.servo.pulse_max_us==2000 && s.config.servo.angle_min==-1);
     assert(!*run("robot joint command pan 0.5"));
     assert(!*run("robot joint close pan"));
+    assert(solar_os_robot_model_load_xml(model_velocity_fixture,strlen(model_velocity_fixture),NULL,0)==ESP_OK);
+    assert(strstr(run("robot start"),"controllers started"));
+    assert(strstr(run("robot joint list"),"model_wheel: velocity waiting"));
+    assert(strstr(run("robot model transform root wheel"),"Joint 'model_wheel' has no current position"));
+    assert(strstr(run("robot model set model_wheel 0"),"Bound joints use live feedback"));
+    encoder_count+=525; time_value+=20000;
+    lock(); for(unsigned i=0;i<SOLAR_OS_ROBOT_JOINT_MAX;++i) if(joints[i]) cycle(joints[i]); unlock();
+    assert(strstr(run("robot model transform root wheel"),"root <- wheel:"));
+    assert(strstr(run("robot model joints"),"known=1"));
+    assert(strstr(run("robot model unload"),"Run robot stop"));
+    assert(strstr(run("robot stop"),"controllers stopped"));
+    assert(strstr(run("robot model transform root wheel"),"Joint 'model_wheel' has no current position"));
+    assert(!*run("robot model unload"));
+    drive_binding_check=drive_shell_check;diff_drive_integration_test();
     teardown(); puts("Robot shell: joint namespace, argument routing, calibration and lifecycle passed");
     return 0;
 }

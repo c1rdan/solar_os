@@ -14,13 +14,13 @@ while suspended. The host joins audio/presentation before enabling the hook and
 waits for reclamation before resume or unload. The callback may free owner-safe
 data only; it must not allocate, wait, or call foreground APIs. Check table size
 before registering. Ordinary module pointers remain fixed. See
-[memory policy](../memory-policy.md) for the shared buffer and paging contracts.
+[memory policy](https://github.com/nilseuropa/solar_os/blob/main/doc/memory-policy.md) for the shared buffer and paging contracts.
 
 Native foreground apps are trusted ESP32-S3 modules. They use the same sessions,
 display ownership, keyboard shortcuts and cold-state lifecycle as built-in apps.
-Emulators such as [Apple II Plus](app.apple2.md), [Game Boy](app.gameboy.md)
-and [amiga](app.amiga.md)
-are foreground apps. Their CPU cores and guest state belong to their modules.
+Emulators such as [Apple II Plus](app.apple2.md), [Commodore 64](app.c64.md),
+[Game Boy](app.gameboy.md) and [amiga](app.amiga.md) are foreground apps.
+Their CPU cores and guest state belong to their modules.
 
 ## Quick reference
 
@@ -65,6 +65,38 @@ Changes made through direct file APIs may take up to 30 seconds to appear.
 
 The package catalog has application, job, driver and
 [library](native-library.md) categories.
+
+## Storage for synchronous native commands
+
+Synchronous native commands launched with `load` or by installed app name
+can request `get_service("storage", 1, sizeof(solar_os_native_storage_api_v1_t))`.
+The table is declared in `solar_os_native_storage_abi.h`. Check for a null
+result on firmware without this service.
+
+Pass the returned `context` to each method. `resolve_path` captures the
+launching shell's working directory; a null path returns that directory.
+`file_size`, `read_file` and `replace_file` require resolved absolute paths.
+Reads accept offsets up to 2 GiB minus one and at most 64 KiB per call;
+replacement accepts at most 2 MiB. Paths must fit in 160 bytes including
+the terminator. `replace_file` syncs a staging file and uses backup/restore
+to preserve the previous output on ordinary filesystem errors. It reserves
+`.native.tmp` and `.native.bak` siblings. An existing staging file refuses
+replacement. This does not guarantee atomic visibility or power-loss recovery.
+
+The appended `directory_entry`, `make_directories` and `remove_path` methods
+support directory traversal and output cleanup. Request the full table to use
+them; older firmware supports the prefix `SOLAR_OS_NATIVE_STORAGE_BASE_SIZE`.
+`directory_entry` returns one entry in filesystem order and indicates whether
+more follow. `remove_path` removes one file or empty directory and remains
+available after cancellation so a caller can clean up its own unfinished files.
+
+Poll `stop_requested(context)` during long operations. It latches Ctrl+C,
+Ctrl+] and shell shutdown requests from the launching display or port shell.
+The service table and context live until the command's native entry returns.
+Joined workers may use them while the entry waits; stop and join those
+workers before returning. Resident libraries must not cache these pointers
+for subsequent calls. Foreground lifecycle apps use their foreground storage
+methods instead.
 
 ## Developer reference: resource declaration
 
@@ -149,6 +181,14 @@ do not write to it. Never free these buffers or mix this path with `present`.
 The writing buffer survives suspension, and the host restores the latest frame
 on resume. All host-owned buffers are released when the worker exits.
 
+For a monochrome source, check for the appended
+`video_open_mono1(width, height, fps)` method. Rows use `(width + 7) / 8` bytes,
+with the least significant bit first and one meaning black. `present`,
+`video_acquire`, and `video_exchange` then use that packed size. This avoids
+expanding a monochrome guest screen to INDEX8 and saves seven eighths of each
+host-owned frame buffer. Older hosts may omit this method; check `struct_size`
+and fall back to indexed video when unavailable or unsupported by the target.
+
 Use `cooperate` at regular CPU-work checkpoints. The host coalesces these
 requests while allowing periodic idle-task work. Use `sleep_ms` for timed waits,
 and continue polling stop and suspend requests. The
@@ -169,6 +209,17 @@ use the rotated host surface; relative deltas are unscaled. Buttons are a
 held-state mask (bit 0 left, bit 1 right). Each opting-in app has a bounded
 pointer queue. Queue overflow and session switches produce a reset event;
 the module must release buttons and clear position anchors on reset.
+
+Apps that set `SOLAR_OS_NATIVE_APP_AXIS_EVENTS` receive display-routed axis
+events through the appended `read_axis` method. Events contain `source`, `axis`,
+`value`, and `delta`; USB HID axes use -32767..32767. Axis identifiers run from
+`SOLAR_OS_NATIVE_AXIS_X` through `SOLAR_OS_NATIVE_AXIS_RZ`. Each opting-in app has
+a bounded queue. Overflow and session switches produce a `reset` event; clear
+held axis controls on reset. The appended `joystick_source` method returns the
+first ready joystick source, or zero if none is available. Recheck it for
+hot-plug and release the previous source's controls when it changes. Joystick
+buttons and hats arrive through `read_key`: raw buttons have `key=0`, `usage=0`
+and their HID button number in `physical_key`; hats produce arrow keys.
 
 The appended `calendar_read` method returns the host local calendar date and
 time. It does not provide a way to set the host clock. Request a service table

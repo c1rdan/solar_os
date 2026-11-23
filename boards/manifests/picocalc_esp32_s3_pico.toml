@@ -27,7 +27,7 @@ drivers = [
 capabilities = [
   "streaming_display",
   "psram", "simd", "display", "gfx", "display_brightness",
-  "cdc", "uart", "sd", "i2c", "spi", "battery", "audio",
+  "cdc", "usb_host", "uart", "sd", "i2c", "spi", "battery", "audio",
   "wifi", "ble", "gpio", "adc", "pwm", "key",
   "expansion_gpio", "expansion_i2c", "expansion_spi", "expansion_uart",
   "expansion_adc", "expansion_pwm",
@@ -254,11 +254,11 @@ role = "keyboard/power MCU I2C SCL (Pico GP7)"
 [[pins]]
 gpio = 19
 policy = "fixed"
-role = "USB D-/CDC"
+role = "USB D-/CDC or host"
 [[pins]]
 gpio = 20
 policy = "fixed"
-role = "USB D+/CDC"
+role = "USB D+/CDC or host"
 [[pins]]
 gpio = 21
 policy = "fixed"

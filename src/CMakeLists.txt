@@ -78,10 +78,12 @@ endif()
 message(STATUS "SolarOS board: ${SOLAR_OS_BOARD_NAME} (${SOLAR_OS_BOARD_ID})")
 
 set(SOLAR_OS_BOARD_CAPABILITY_NAMES
+    QEMU
     PSRAM
     DISPLAY
     GFX
     CDC
+    USB_HOST
     UART
     SD
     I2C
@@ -314,12 +316,40 @@ if(NOT SOLAR_OS_KEYMAP_GENERATE_RESULT EQUAL 0)
     message(FATAL_ERROR "SolarOS keymap generation failed")
 endif()
 include("${SOLAR_OS_GENERATED_DIR}/solar_os_keymap_inputs.cmake")
+
+# Language layouts (keymaps/layouts/*.json, generated from xkeyboard-config).
+set(SOLAR_OS_KEYBOARD_LAYOUT_COMPILER "${SOLAR_OS_PROJECT_DIR}/scripts/compile_keyboard_layouts.py")
+file(GLOB SOLAR_OS_KEYBOARD_LAYOUT_FILES "${SOLAR_OS_PROJECT_DIR}/keymaps/layouts/*.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${SOLAR_OS_KEYBOARD_LAYOUT_COMPILER}"
+    "${SOLAR_OS_PROJECT_DIR}/scripts/generate_keyboard_layouts.py"
+    ${SOLAR_OS_KEYBOARD_LAYOUT_FILES}
+)
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${SOLAR_OS_KEYBOARD_LAYOUT_COMPILER}"
+        "--output" "${SOLAR_OS_GENERATED_DIR}/solar_os_keyboard_layouts_generated.h"
+    RESULT_VARIABLE SOLAR_OS_KEYBOARD_LAYOUT_RESULT
+)
+if(NOT SOLAR_OS_KEYBOARD_LAYOUT_RESULT EQUAL 0)
+    message(FATAL_ERROR "SolarOS keyboard layout generation failed")
+endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SOLAR_OS_KEYMAP_INPUTS})
 foreach(SOLAR_OS_KEYMAP_PACKAGE IN LISTS SOLAR_OS_KEYMAP_REQUIRED_PACKAGES)
     if(NOT SOLAR_OS_PACKAGE_${SOLAR_OS_KEYMAP_PACKAGE})
         message(FATAL_ERROR "Custom keymap requires package ${SOLAR_OS_KEYMAP_PACKAGE} in the selected flavor")
     endif()
 endforeach()
+if(SOLAR_OS_PACKAGE_EXPANSION_GPIO_MATRIX)
+    set(SOLAR_OS_KEYBOARD_PATCH "${SOLAR_OS_PROJECT_DIR}/scripts/patch_keyboard_button.py")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SOLAR_OS_KEYBOARD_PATCH}")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${SOLAR_OS_KEYBOARD_PATCH}"
+        "${SOLAR_OS_PROJECT_DIR}/managed_components/espressif__keyboard_button"
+        RESULT_VARIABLE SOLAR_OS_KEYBOARD_PATCH_RESULT)
+    if(NOT SOLAR_OS_KEYBOARD_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "SolarOS keyboard scanner overlay failed")
+    endif()
+endif()
+
 if(SOLAR_OS_PACKAGE_SERVICE_NATIVE_MODULES)
     set(SOLAR_OS_NATIVE_ELF_PATCH "${SOLAR_OS_PROJECT_DIR}/scripts/patch_native_elf.py")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SOLAR_OS_NATIVE_ELF_PATCH}")
@@ -462,6 +492,12 @@ if(SOLAR_OS_BOARD_HAS_TEMPERATURE OR SOLAR_OS_BOARD_HAS_HUMIDITY)
     set(SOLAR_OS_BOARD_HAS_SENSORS ON)
 endif()
 solar_os_require_board_driver("${SOLAR_OS_BOARD_HAS_CDC}" CDC SOLAR_OS_BOARD_CDC_DRIVER)
+if(SOLAR_OS_BOARD_HAS_USB_HOST AND
+        (NOT IDF_TARGET STREQUAL "esp32s3" OR
+         (SOLAR_OS_BOARD_HAS_CDC AND
+          NOT SOLAR_OS_BOARD_CDC_DRIVER STREQUAL "usb_serial_jtag")))
+    message(FATAL_ERROR "USB_HOST requires ESP32-S3 and, when CDC is enabled, the USB Serial/JTAG CDC driver")
+endif()
 solar_os_require_board_driver("${SOLAR_OS_BOARD_HAS_DISPLAY}" DISPLAY SOLAR_OS_BOARD_DISPLAY_DRIVER)
 solar_os_require_board_driver("${SOLAR_OS_BOARD_HAS_UART}" UART SOLAR_OS_BOARD_UART_DRIVER)
 solar_os_require_board_driver("${SOLAR_OS_BOARD_HAS_SD}" SD SOLAR_OS_BOARD_STORAGE_DRIVER)
@@ -542,6 +578,9 @@ set_property(SOURCE ${SOLAR_OS_SRCS} APPEND PROPERTY OBJECT_DEPENDS
 )
 
 set(SOLAR_OS_LINKER_FRAGMENTS)
+if(SOLAR_OS_PACKAGE_APP_CC)
+    list(APPEND SOLAR_OS_LINKER_FRAGMENTS "cc_memory.lf")
+endif()
 if(SOLAR_OS_PACKAGE_DRIVER_CAMERA_ESP32)
     list(APPEND SOLAR_OS_LINKER_FRAGMENTS "camera_memory.lf")
 endif()
@@ -554,6 +593,80 @@ idf_component_register(
     REQUIRES ${SOLAR_OS_REQUIRES}
     LDFRAGMENTS ${SOLAR_OS_LINKER_FRAGMENTS}
 )
+
+if(SOLAR_OS_PACKAGE_APP_CC)
+    include("${SOLAR_OS_PROJECT_DIR}/cmake/solar_os_cc_builtin.cmake")
+    solar_os_link_builtin_cc(${COMPONENT_LIB})
+endif()
+
+if(SOLAR_OS_PACKAGE_SERVICE_USB_HOST)
+    # Keep the pinned managed component pristine. Compile a generated copy
+    # with lifecycle mutex cleanup and transfer-error checks.
+    idf_component_get_property(SOLAR_OS_USB_HID_DIR espressif__usb_host_hid COMPONENT_DIR)
+    idf_component_get_property(SOLAR_OS_USB_HID_LIB espressif__usb_host_hid COMPONENT_LIB)
+    set(SOLAR_OS_USB_HID_PATCH "${SOLAR_OS_PROJECT_DIR}/scripts/patch_usb_hid.py")
+    set(SOLAR_OS_USB_HID_SOURCE "${SOLAR_OS_USB_HID_DIR}/hid_host.c")
+    set(SOLAR_OS_USB_HID_GENERATED "${SOLAR_OS_GENERATED_DIR}/hid_host.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${SOLAR_OS_USB_HID_PATCH}" "${SOLAR_OS_USB_HID_SOURCE}")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${SOLAR_OS_USB_HID_PATCH}"
+        "${SOLAR_OS_USB_HID_SOURCE}" "${SOLAR_OS_USB_HID_GENERATED}"
+        RESULT_VARIABLE SOLAR_OS_USB_HID_PATCH_RESULT)
+    if(NOT SOLAR_OS_USB_HID_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "SolarOS USB HID patch failed")
+    endif()
+    set_property(TARGET ${SOLAR_OS_USB_HID_LIB} PROPERTY SOURCES "${SOLAR_OS_USB_HID_GENERATED}")
+endif()
+
+if(SOLAR_OS_PACKAGE_SERVICE_USB_SERIAL)
+    foreach(SOLAR_OS_VCP_KIND IN ITEMS ch34x cp210x)
+        set(SOLAR_OS_VCP_COMPONENT "espressif__usb_host_${SOLAR_OS_VCP_KIND}_vcp")
+        idf_component_get_property(SOLAR_OS_VCP_DIR ${SOLAR_OS_VCP_COMPONENT} COMPONENT_DIR)
+        idf_component_get_property(SOLAR_OS_VCP_LIB ${SOLAR_OS_VCP_COMPONENT} COMPONENT_LIB)
+        set(SOLAR_OS_VCP_SOURCE "${SOLAR_OS_VCP_DIR}/usb_host_${SOLAR_OS_VCP_KIND}_vcp.c")
+        set(SOLAR_OS_VCP_GENERATED "${SOLAR_OS_GENERATED_DIR}/usb_host_${SOLAR_OS_VCP_KIND}_vcp.c")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${SOLAR_OS_PROJECT_DIR}/scripts/patch_usb_vcp.py" "${SOLAR_OS_VCP_SOURCE}")
+        execute_process(COMMAND "${Python3_EXECUTABLE}" "${SOLAR_OS_PROJECT_DIR}/scripts/patch_usb_vcp.py"
+            "${SOLAR_OS_VCP_KIND}" "${SOLAR_OS_VCP_SOURCE}" "${SOLAR_OS_VCP_GENERATED}"
+            RESULT_VARIABLE SOLAR_OS_VCP_RESULT)
+        if(NOT SOLAR_OS_VCP_RESULT EQUAL 0)
+            message(FATAL_ERROR "SolarOS USB VCP patch failed")
+        endif()
+        set_property(TARGET ${SOLAR_OS_VCP_LIB} PROPERTY SOURCES "${SOLAR_OS_VCP_GENERATED}")
+    endforeach()
+endif()
+
+if(SOLAR_OS_PACKAGE_SERVICE_USB_STORAGE)
+    idf_component_get_property(SOLAR_OS_USB_MSC_DIR espressif__usb_host_msc COMPONENT_DIR)
+    idf_component_get_property(SOLAR_OS_USB_MSC_LIB espressif__usb_host_msc COMPONENT_LIB)
+    set(SOLAR_OS_USB_MSC_PATCH "${SOLAR_OS_PROJECT_DIR}/scripts/patch_usb_msc.py")
+    set(SOLAR_OS_USB_MSC_GENERATED "${SOLAR_OS_GENERATED_DIR}/usb_msc")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${SOLAR_OS_USB_MSC_PATCH}" "${SOLAR_OS_USB_MSC_DIR}/src/msc_host.c"
+        "${SOLAR_OS_USB_MSC_DIR}/src/msc_scsi_bot.c")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${SOLAR_OS_USB_MSC_PATCH}"
+        "${SOLAR_OS_USB_MSC_DIR}" "${SOLAR_OS_USB_MSC_GENERATED}"
+        RESULT_VARIABLE SOLAR_OS_USB_MSC_PATCH_RESULT)
+    if(NOT SOLAR_OS_USB_MSC_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "SolarOS USB MSC patch failed")
+    endif()
+    get_target_property(SOLAR_OS_USB_MSC_SOURCES ${SOLAR_OS_USB_MSC_LIB} SOURCES)
+    set(SOLAR_OS_USB_MSC_PATCHED_SOURCES)
+    foreach(SOLAR_OS_USB_MSC_SOURCE IN LISTS SOLAR_OS_USB_MSC_SOURCES)
+        get_filename_component(SOLAR_OS_USB_MSC_NAME "${SOLAR_OS_USB_MSC_SOURCE}" NAME)
+        if(SOLAR_OS_USB_MSC_NAME STREQUAL "msc_host.c" OR SOLAR_OS_USB_MSC_NAME STREQUAL "msc_scsi_bot.c")
+            list(APPEND SOLAR_OS_USB_MSC_PATCHED_SOURCES "${SOLAR_OS_USB_MSC_GENERATED}/${SOLAR_OS_USB_MSC_NAME}")
+        elseif(IS_ABSOLUTE "${SOLAR_OS_USB_MSC_SOURCE}")
+            list(APPEND SOLAR_OS_USB_MSC_PATCHED_SOURCES "${SOLAR_OS_USB_MSC_SOURCE}")
+        else()
+            list(APPEND SOLAR_OS_USB_MSC_PATCHED_SOURCES "${SOLAR_OS_USB_MSC_DIR}/${SOLAR_OS_USB_MSC_SOURCE}")
+        endif()
+    endforeach()
+    set_property(TARGET ${SOLAR_OS_USB_MSC_LIB} PROPERTY SOURCES ${SOLAR_OS_USB_MSC_PATCHED_SOURCES})
+    target_include_directories(${SOLAR_OS_USB_MSC_LIB} PRIVATE "${SOLAR_OS_PROJECT_DIR}/src/drivers")
+    target_include_directories(${COMPONENT_LIB} PRIVATE "${SOLAR_OS_USB_MSC_DIR}/private_include")
+endif()
 
 if(SOLAR_OS_PACKAGE_BHI260AP)
     target_add_binary_data(${COMPONENT_LIB} "vendor/bhy2/BHI260AP.fw" BINARY)

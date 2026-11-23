@@ -644,11 +644,6 @@ static esp_err_t docs_validate_catalog_page(const solar_os_json_value_t *page,
     if (err != ESP_OK) {
         return err;
     }
-    for (size_t previous = 0U; previous < index; previous++) {
-        if (strcmp(ids->ids[previous], ids->ids[index]) == 0) {
-            return ESP_ERR_INVALID_RESPONSE;
-        }
-    }
     /* Size the runtime index while validating, so building it takes a
      * single pass over the pages. */
     if (applies) {
@@ -663,6 +658,13 @@ static esp_err_t docs_validate_catalog_page(const solar_os_json_value_t *page,
     return ESP_OK;
 }
 
+/* Validate IDs once, then compare the compact sorted set. Repeated indexed
+ * lookups into a linked JSON array made duplicate detection cubic in pages. */
+static int docs_compare_page_ids(const void *first, const void *second)
+{
+    return strcmp(first, second);
+}
+
 static esp_err_t docs_validate_catalog_pages(
     const docs_pages_t *pages,
     docs_catalog_t *info,
@@ -671,6 +673,9 @@ static esp_err_t docs_validate_catalog_pages(
     const size_t page_count = info->page_count;
     info->index_count = 0U;
     info->index_bytes = 0U;
+    if (page_count == 0U || page_count > SOLAR_OS_DOCS_PAGE_COUNT_MAX) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     docs_page_ids_t ids = {
         .ids = solar_os_memory_alloc(page_count * sizeof(docs_page_id_t),
                                      SOLAR_OS_MEMORY_EXTERNAL_PREFERRED,
@@ -690,23 +695,24 @@ static esp_err_t docs_validate_catalog_pages(
     if (err == ESP_OK && visited != page_count) {
         err = ESP_ERR_INVALID_RESPONSE;
     }
-
+    if (err == ESP_OK) {
+        qsort(ids.ids, page_count, sizeof(*ids.ids), docs_compare_page_ids);
+        for (size_t i = 1U; i < page_count; i++) {
+            if (strcmp(ids.ids[i - 1U], ids.ids[i]) == 0) {
+                err = ESP_ERR_INVALID_RESPONSE;
+                break;
+            }
+        }
+    }
     for (size_t topic = 0U;
          err == ESP_OK && require_embedded_pages &&
          topic < solar_os_manual_embedded_count();
          topic++) {
         const solar_os_manual_page_t *manual =
             solar_os_manual_embedded_get(topic);
-        bool found = false;
-        for (size_t page_index = 0U;
-             manual != NULL && page_index < page_count;
-             page_index++) {
-            if (strcmp(ids.ids[page_index], manual->id) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+        if (manual == NULL ||
+            bsearch(manual->id, ids.ids, page_count, sizeof(*ids.ids),
+                    docs_compare_page_ids) == NULL) {
             err = ESP_ERR_INVALID_RESPONSE;
         }
     }

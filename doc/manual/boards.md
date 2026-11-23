@@ -19,9 +19,10 @@ The current tree includes these board targets:
 
 | Target | PlatformIO env | Hardware | Highlights |
 | --- | --- | --- | --- |
+| `seeed_sensecap_watcher` | `seeed_sensecap_watcher` | [Seeed Studio SenseCAP Watcher](https://wiki.seeedstudio.com/watcher_hardware_overview/) | 412x412 SPD2010 QSPI display and touch, Himax HX6538 JPEG camera sampling, ES8311/ES7243E audio, microSD, battery ADC, PCF8563 RTC, wheel with push switch, one RGB LED, Wi-Fi, BLE keyboard input, and an optional USB-to-UART console. J2 exposes GPIO19/20 and shared I2C; Grove carries the same I2C bus. See [Watcher](watcher.md). |
 | `solar_term` | `solar_term` | [SolarTerm](https://github.com/nilseuropa/solar_term), built from the Waveshare ESP32-S3-RLCD-4.2 | Primary ST7305 reflective display target with SDMMC, CDC, UART, RTC, SHTC3, battery ADC, ES8311/ES7210 audio, expansion I2C/SPI/UART/GPIO/ADC/PWM, and runtime-routable SPI3 on GPIO1/GPIO2/GPIO3/GPIO17. SolarOS refers to this hardware configuration as SolarTerm. |
-| `solar_writer` | `solar_writer` | SolarWriter, built from the Elecrow CrowPanel 5.79-inch | 792x272 dual-SSD1683 display, INMP441 microphone, shared PCM5102 line output and MAX98357 speaker output, LC709203F fuel gauge, DS3231 RTC, microSD, CH340/UART console, and GPIO21 reserved for jack detect. |
-| `freenove_esp32_s3_display_4_0` | `freenove_esp32_s3_display_4_0` | Freenove ESP32-S3 Display 4.0-inch (FNK0104S) | Integrated 480x320 ST7796 display, FT6336 capacitive pointer, ES8311 speaker and microphone, four-bit SDMMC, battery ADC, native USB CDC, and UART/I2C/GPIO expansion connectors. |
+| `solar_writer` | `solar_writer` | SolarWriter, built from the Elecrow CrowPanel 5.79-inch | 792x272 dual-SSD1683 display, ICS-43432 microphone, shared PCM5102A line output and MAX98357A speaker output, DAC/amp power enabled by default on GPIO21, MAX17048G fuel gauge, DS3231MZ RTC, microSD, and CH340/UART console. GPIO18/19/20/38 belong to the I/O board's USB host wiring. |
+| `freenove_esp32_s3_display_4_0` | `freenove_esp32_s3_display_4_0` | Freenove ESP32-S3 Display 4.0-inch (FNK0104S) | Integrated 480x320 ST7796 display, FT6336 capacitive pointer, ES8311 speaker and microphone, four-bit SDMMC, battery ADC, one WS2812B RGB LED, native USB CDC/host switching, and UART/I2C/GPIO expansion connectors. |
 | `qdtech_es3c28p` | `qdtech_es3c28p` | [QDtech ES3C28P 2.8-inch ESP32-S3 Touch Display](https://www.lcdwiki.com/2.8inch_ESP32-S3_Display) | Capacitive-touch ESP32-S3R8 target with 16 MB flash, 8 MB PSRAM, a 320x240 landscape ILI9341V display, FT6336 pointer, ES8311 speaker and microphone, four-bit SDMMC, battery ADC, one WS2812B, native USB CDC, and UART/I2C/GPIO expansion connectors. |
 | `qdtech_es3n28p` | `qdtech_es3n28p` | [QDtech ES3N28P 2.8-inch ESP32-S3 Display](https://www.lcdwiki.com/2.8inch_ESP32-S3_Display) | Non-touch ESP32-S3R8 target with 16 MB flash, 8 MB PSRAM, a 320x240 landscape ILI9341V display, ES8311 speaker and microphone, four-bit SDMMC, battery ADC, one WS2812B, native USB CDC, and UART/I2C/GPIO expansion connectors. |
 | `elecrow_crowpanel_esp32_s3_4_2_epaper` | `elecrow_crowpanel_esp32_s3_4_2_epaper` | Elecrow CrowPanel ESP32-S3 4.2-inch E-paper | ESP32-S3-WROOM-1-N8R8 target with a 400x300 SSD1683 e-paper display, microSD over SDSPI, CH340C/UART console, rotary/menu/exit controls, status LED, Wi-Fi, BLE, and expansion I2C/SPI/UART/1-Wire/GPIO/ADC/PWM. |
@@ -29,13 +30,16 @@ The current tree includes these board targets:
 | `waveshare_esp32_s3_epaper_3_97` | `waveshare_esp32_s3_epaper_3_97` | [Waveshare ESP32-S3-ePaper-3.97](https://docs.waveshare.com/ESP32-S3-ePaper-3.97) | ESP32-S3-WROOM-1-N16R8 target with an SSD1677 e-paper display that defaults to 800x480 landscape, AXP2101 battery/charger monitoring, QMI8658 six-axis IMU, four-bit SDMMC, native USB CDC, UART, PCF85063 RTC, SHTC3 temperature/humidity sensor, ES8311 speaker/microphone audio, rotary navigation, Wi-Fi, BLE, and expansion I2C/UART. |
 | `seeed_reterminal_e1003` | `seeed_reterminal_e1003` | [Seeed Studio reTerminal E1003](https://wiki.seeedstudio.com/getting_started_with_reterminal_e1003/) | ESP32-S3R8, 32 MB flash, 8 MB PSRAM, 1872x1404 IT8951/ED103TC2 e-paper with 16 gray levels, GT911 touch, SHT40, PCF8563, SY6974B charger and battery ADC, PDM microphone, PWM buzzer, shared-SPI microSD, buttons, and UART console over the USB bridge. |
 | `seeed_reterminal_sticky` | `seeed_reterminal_sticky` | [Seeed Studio reTerminal Sticky](https://www.seeedstudio.com/reTerminal-Sticky-p-6861.html) | ESP32-S3R8 target with 32 MB flash, 8 MB PSRAM, 3.97-inch 800x480 monochrome e-paper with SSD1677/SSD2677 startup detection, GT911 capacitive touch, three physical buttons (AI/Power: sleep/wake on tap, shutdown on hold; Up: arrow on tap, BLE pairing on hold; Down: arrow on tap), Wi-Fi, and BLE. Console is UART0 (CH343). |
+| `m5stack_papermono` | `m5stack_papermono` | [M5Stack Paper Mono](https://docs.m5stack.com/en/core/PaperMono) | ESP32-S3R8 target with 16 MB flash, 8 MB OPI PSRAM, a 3.97-inch 480x800 SSD1677 e-paper panel and FT6336G touch, M5PM1 power management (VBAT, shutdown, frontlight PWM), M5IOE1 GPIO expander for panel/radio/storage rails, an SX1262 LoRa stamp, an I2C ST25R3916 NFC-A reader, RX8130CE RTC, BMI270 IMU, IP2315 USB charger behind a gated I2C switch, four-bit SDMMC, a PWM buzzer, a PDM microphone, two front buttons (A: Enter on tap, BLE pairing on hold, wake from sleep; B: Escape on tap, clean shutdown on long press), native USB CDC/host switching, Wi-Fi, and BLE. NFC power starts disabled and is enabled with `nfc power on`. The IP2315 charger is only addressable when its I2C gate is opened; if the charger entered LED mode after a USB plug-in, charge status stays undetermined until VIN is removed. |
 | `xteink_x4_pro` | `xteink_x4_pro` | Xteink X4 Pro | ESP32-S3 target with 16 MB flash, 8 MB OPI PSRAM, an 800x480 landscape e-paper display with cached SSD1677/UC8179/UC8279 identification, fixed-mix frontlight brightness, GT911 touch and Home pad, one-bit SDMMC, BM8563-compatible RTC, CW2017 gauge, native USB CDC, UART0, navigation buttons, Wi-Fi, and BLE. |
 | `cl_32` | `cl_32` | Pi0cket CL-32 | ESP32-S3-WROOM-1-N16R8 target with an automatically detected 384x168 ST7305 reflective LCD or SSD1685 e-paper panel, an ATmega808-backed keyboard and battery monitor, native USB CDC, UART, microSD over SDSPI, PCF85063 RTC, onboard PWM buzzer, Wi-Fi, BLE, and expansion I2C/SPI/UART/GPIO/ADC/PWM/I2S. |
 | `odroid_go` | `odroid_go` | Hardkernel ODROID-GO | Classic ESP32 target with ILI9341 display, SD over VSPI/SDSPI, battery ADC, ESP32 DAC speaker, buttons, ADC D-pad, status LED, display brightness, expansion I2C/SPI/UART/GPIO/PWM, and runtime GPIO4/GPIO15. |
 | `freenove_esp32_wrover_v3` | `freenove_esp32_wrover_v3` | Freenove ESP32-WROVER v3.0 (FNK0060) | Classic ESP32 target with 8 MB PSRAM, CH340/UART console, one-bit SDMMC, Wi-Fi, BLE, a GPIO0 BOOT/KEY button, and a 384x288 monochrome PAL composite display on GPIO25. |
 | `ttgo_vga32_v14` | `ttgo_vga32_v14` | LilyGO TTGO VGA32 v1.4 | ESP32-PICO-D4 desktop target with 8 MB external PSRAM, build-selectable 320x200@70Hz, 320x240@60Hz, 640x400@70Hz, or 640x480@60Hz VGA output through the onboard RGB222 resistor DAC, GPIO25 mono DAC audio, a default-attached PS/2 keyboard, v1.4 microSD wiring over HSPI, USB-UART, Wi-Fi, BLE disabled by default, and two input-only expansion GPIOs. |
 | `esp32_s3_devkitc1_n16r8` | `esp32_s3_devkitc1_n16r8` | Espressif ESP32-S3-DevKitC-1-N16R8 | Headless ESP32-S3 target with CDC, UART, Wi-Fi, BLE, a GPIO0 BOOT/KEY button, expansion I2C/SPI/UART/GPIO/ADC/PWM, graphics through attachable display targets, and no primary display or onboard sensors. |
-| `goouuu_esp32_s3cam` | `goouuu_esp32_s3cam` | GOOUUU ESP32-S3CAM | Headless ESP32-S3 camera target with 16 MB flash, 8 MB PSRAM, native USB CDC, CH340/UART console, one-bit SDMMC, an onboard WS2812, Wi-Fi, BLE, and fixed DVP/SCCB camera wiring. Its required `driver.camera-esp32` package exposes OV2640 probing and bounded QVGA/VGA JPEG capture through `service.camera`; `cam-webd` adds a single-client MJPEG stream and JPEG snapshots with optional authentication over the shared HTTP server. |
+| `qemu_esp32s3` | `qemu_esp32s3` | QEMU ESP32-S3 (DevKitC-1-N16R8 layout) | Headless ESP32-S3 target for Espressif's QEMU `esp32s3` machine, with a UART0 shell exposed as a host serial device, shared host-directory storage at `/host`, and audio playback through `audio0`. No display, networking, BLE, microphone, battery or SD card. Host storage and audio default on for Linux and macOS; native Windows requires WSL or an extended emulator for these features. Build and launch: [Running SolarOS in QEMU](qemu.md). |
+| `qemu_esp32s3_rgb` | `qemu_esp32s3_rgb` | QEMU ESP32-S3 with virtual display | `qemu_esp32s3` plus an 800x600 monochrome `display0`, native HID keyboard, absolute touch or relative mouse input through `input0`, and host networking through `eth0`, reported as Wi-Fi. The UART0 shell remains available alongside the display shell; `session create <app> display0` starts apps on the window. Build and launch with the required graphical backend: [Running SolarOS in QEMU](qemu.md). |
+| `goouuu_esp32_s3cam` | `goouuu_esp32_s3cam` | GOOUUU ESP32-S3CAM | Headless ESP32-S3 camera target with 16 MB flash, 8 MB PSRAM, native USB CDC, CH340/UART console, one-bit SDMMC, an onboard WS2812, Wi-Fi, BLE, and fixed DVP/SCCB camera wiring. Its required `driver.camera-esp32` package exposes OV2640/OV5640 detection and bounded QVGA/VGA JPEG capture through `service.camera`; `cam-webd` adds a single-client MJPEG stream and JPEG snapshots with optional authentication over the shared HTTP server. |
 | `esp32_devkitc_v4_wrover` | `esp32_devkitc_v4_wrover` | Espressif ESP32-DevKitC V4 with ESP32-WROVER-E | Headless classic ESP32 target with PSRAM, UART, Wi-Fi, BLE, a GPIO0 BOOT/KEY button, expansion I2C/SPI/UART/GPIO/ADC/PWM/I2S, graphics through attachable display targets, and no built-in peripherals. |
 | `devkitc1_epaper_workbench` | `esp32_s3_devkitc1_n16r8` with `SOLAR_OS_BOARD=devkitc1_epaper_workbench` | ESP32-S3 DevKitC-1 E-paper Workbench | Manifest-generated development target with fixed CardKB, 400x300 SSD1683 display, and SDSPI storage attachments. |
 | `t_lora_pager` | `t_lora_pager` | LilyGO T-LoRa-Pager (SX1262) | ESP32-S3-WROOM-1-N16R8 target with a 480x222 ST7796 display, a TCA8418 4x10 matrix keyboard, an SX1262 LoRa radio, PCF85063 RTC, microSD over SDSPI, ES8311 audio, a BQ27220 battery gauge, a BQ25896 charger, a rotary encoder, an XL9555 I2C GPIO controller for integrated power rails, a MIA-M10Q GNSS receiver, an ST25R3916 NFC-A reader, a BHI260AP IMU, a DRV2605 haptic controller, native USB CDC, Wi-Fi, BLE, and expansion I2C/SPI/UART/GPIO/ADC/PWM. SD power and its external pull-up start enabled; GNSS and NFC power start disabled and are enabled with `gnss power on` and `nfc power on`. Use `haptic play EFFECT` for DRV2605 ROM effects 1 through 117. The Pager fixes BQ25896 fast-charge current at 704 mA during attachment; inspect or explicitly change charger settings with `charger`. |
@@ -54,7 +58,7 @@ RLCD modules without register readback are identified through their reset/TE
 response on GPIO14; the SSD1685 software-reset BUSY pulse distinguishes e-paper.
 
 T-Deck Plus registers its factory L76K or MIA-M10Q receiver as `gnss0` through
-the `nmea` driver, listening at 9600 baud and trying 38400 if needed. Use
+the `nmea` driver, listening at 38400 baud and trying 9600 if needed. Use
 `gnss list` and `gnss fix gnss0` to inspect it. This NMEA path supplies position,
 UTC, and satellite information; position accuracy and PDOP are unavailable.
 The receiver has no independent power control. The standard T-Deck Plus has no
@@ -344,6 +348,7 @@ The current capability flags are:
 | `DISPLAY` | A board-integrated primary display driver and boot-time display target are available. Requires `GFX`. |
 | `GFX` | The firmware can host drawable display targets, including targets registered later by expansion drivers. It does not imply that a display exists at boot. |
 | `CDC` | USB Serial/JTAG CDC byte-stream port `cdc0`. The dormant TinyUSB composite driver can add keyboard, mouse, and gamepad HID reports when explicitly enabled. |
+| `USB_HOST` | USB keyboard, mouse, joystick, and storage hosting through the ESP32-S3 internal PHY. Storage requires `service.usb-storage` and supports one FAT flash or UFI/CBI floppy drive at `/usb0`. Enabled on targets with accessible native D−/D+ signals on GPIO19/20. Native CDC stops while hosting; USB–UART consoles remain available. Arrange suitable 5 V peripheral power. See [USB host](usb.host.md) for wiring and exclusions. |
 | `UART` | Hardware UART service is supported. Named UART buses may be board-defined or created at runtime. |
 | `SD` | SD/MMC storage and filesystem mounting. |
 | `I2C` | Hardware I2C service is supported. Named I2C buses may be board-defined or created at runtime. |
@@ -374,6 +379,7 @@ The current capability flags are:
 | `POINTER` | Board-integrated absolute or relative pointing input. Events carry a source, pointer ID, display target, coordinates, deltas, buttons, and press/move/release action. |
 | `STREAMING_DISPLAY` | The board's primary display has a bounded-cadence raster-frame presenter suitable for animation or games. This is separate from ordinary terminal and GUI drawing. |
 | `CAMERA` | A board-integrated camera interface and fixed pin contract are present. This hardware fact does not by itself imply that a camera driver or capture service is included. |
+| `QEMU` | An emulated board. Virtual input, display, network, and host-directory packages are restricted to these targets. |
 | `TEMPERATURE` | Temperature sensor service. |
 | `HUMIDITY` | Humidity sensor service. |
 
@@ -887,12 +893,26 @@ attachment `storage0`. Battery
 voltage is measured on GPIO9 through the board divider. The TP4054 circuit is
 an analog charger, not a digitally addressable fuel gauge or battery manager.
 
+The onboard WS2812B RGB LED on GPIO42 is the fixed board attachment `pixels0`.
+It appears in `expansion devices` and in the `io` Pins view. Use
+`neopixel fill pixels0 16 0 0` to light it red and `neopixel clear pixels0` to
+turn it off. GPIO42 remains reserved for the LED.
+
 Expansion wiring is divided across three connectors. `uart0` uses GPIO43 and
 GPIO44. The I2C connector exposes GPIO16 SDA and GPIO15 SCL. The GPIO connector
 exposes runtime-safe GPIO2, GPIO3, GPIO14, and GPIO21. Current Freenove FNK0104S
 documentation identifies the third GPIO signal as GPIO14; GPIO4 is fixed as
 the ES8311 MCLK signal. The BOOT button on GPIO0 becomes the SolarOS KEY after
 startup; do not hold it during reset because it selects download mode.
+
+The native USB-C port connects GPIO19 D− and GPIO20 D+. With
+`service.usb-host` compiled, `usb mode host` switches from native CDC/JTAG to
+USB HID keyboard, mouse, and joystick input. Use the display, UART, or a
+network shell to switch modes. The USB-C port is wired as a power sink and
+does not supply 5 V to peripherals, including when running on battery. Host
+operation requires a suitable externally powered data adapter with regulated
+5 V peripheral power and common ground; a passive USB-C adapter alone is
+insufficient. See [USB host](usb.host.md) for wiring and commands.
 
 Build the target with:
 
@@ -950,14 +970,15 @@ selects the matching command and waveform path automatically.
 The green-sticker revision starts in `refresh=pulse` with the Fastwave phase
 builder adapted to its UC8276 controller. `display mode display0` reports
 `waveform=fastwave-uc8276`. Its preset is
-8 drive cycles, 8 scan frames, raw PLL code 12, asynchronous scanning with a
-67 ms new-image interval, supply cycling, fast ramp, and 20000 kHz pulse SPI.
+8 drive cycles, 8 scan frames, raw PLL code 12, asynchronous scanning with
+hardware completion pacing, supply cycling, fast ramp, and 20000 kHz pulse SPI.
 Fixed cleanup runs every 8 changed targets consumed by the worker.
 It shares per-pixel drive budgets and the scan worker with the other
 pulse-capable panels. The builder drives only changing pixels, with no reset
 kick and one neutral settle frame. The adapter keeps the UC8276's own voltage,
-PLL, RAM, and power commands. `pulse-period` accepts 67–1000 ms between new
-images. Settling drives run as BUSY permits, independently of this interval.
+PLL, RAM, and power commands. `pulse-period=auto` follows hardware completion;
+an explicit interval accepts 67–1000 ms between new images. Settling drives run
+as BUSY permits, independently of this interval.
 New targets can interrupt settling between drives; identical targets retain
 their remaining budgets. The requested interval does not guarantee an achieved rate.
 Runtime tuning remains available through `display mode display0`; internal scan frequency is
@@ -967,7 +988,11 @@ The original Elecrow 4.2-inch panel currently rejects pulse mode.
 
 The board's USB-C data lines terminate at a CH340C USB-to-UART bridge. SolarOS
 therefore uses `uart0` on GPIO43/GPIO44 for the serial console and does not
-claim native USB Serial/JTAG CDC. The BAT connector supplies the board but the
+claim native USB Serial/JTAG CDC. USB host input uses GPIO19 D− and GPIO20 D+
+on U5 with an external connector and regulated 5 V peripheral power; the
+USB–UART console remains available. These pins remain general expansion GPIOs
+outside host mode and must be released before running `usb mode host`.
+See [USB host](usb.host.md). The BAT connector supplies the board but the
 published schematic does not provide a battery-voltage ADC path, so the target
 does not advertise the `BATTERY` capability.
 
@@ -1020,8 +1045,7 @@ one contiguous 792x272 graphics surface.
 The panel uses GPIO12 SCK, GPIO11 MOSI, GPIO47 reset, GPIO46 D/C, GPIO45 chip
 select, GPIO48 BUSY, and GPIO7 display-power enable. The driver follows
 Elecrow's master/slave RAM addressing and temperature-load sequence. The board
-starts in asynchronous monochrome pulse mode with a 67 ms minimum new-image
-interval, held supplies, and automatic cleanup, as described under
+starts in asynchronous monochrome pulse mode with hardware completion pacing, held supplies, and automatic cleanup, as described under
 [SolarWriter](#solarwriter). To select the native waveform, use
 `display mode display0 refresh=auto`. Auto mode
 uses one full cleanup refresh after initialization, then transfers changed
@@ -1057,45 +1081,51 @@ CrowPanel apply to this board.
 ## SolarWriter
 
 The `solar_writer` target combines the Elecrow CrowPanel 5.79-inch N8R8 board
-with a GY-INMP441 microphone, Adafruit PCM5102 DAC, Adafruit I2S Amplifier BFF
-(MAX98357), Adafruit LC709203F battery gauge, and DS3231 real-time clock.
+with the SolarWriter v0.1 I/O board: ICS-43432 microphone, PCM5102APWR stereo
+DAC, MAX98357AETE+T speaker amplifier, MAX17048G+T10 fuel gauge, and
+DS3231MZ+TRL real-time clock. A TPS22917DBVR switches the DAC's 3.3 V rail;
+the TPS61023DRLR boost converter supplies the amplifier's 5 V rail.
 It inherits the CrowPanel's
 792x272 dual-SSD1683 display, microSD, controls, CH340/UART console, Wi-Fi, BLE,
 8 MB flash, and 8 MB OPI PSRAM. The default firmware flavor is `writerdeck`.
 
 The following connections are fixed in this target:
 
-| Function | GPIO | U5 pin | Module connection |
+| Function | GPIO | U5 pin | I/O board connection |
 | --- | --- | --- | --- |
-| I2C SDA | 8 | 20 | LC709203F SDI/SDA and DS3231 SDA |
-| I2C SCL | 9 | 2 | LC709203F SCL and DS3231 SCL |
-| Shared I2S bit clock | 14 | 19 | INMP441 SCK, PCM5102 BCK, BFF A2 |
-| Shared I2S word select | 15 | 3 | INMP441 WS, PCM5102 WSEL, BFF A1 |
-| Playback data | 16 | 18 | PCM5102 DIN and BFF A0 |
-| Microphone data | 17 | 4 | INMP441 SD |
-| Jack detect, reserved | 21 | 6 | Future isolated switch to GND, active low |
+| I2C SDA | 8 | 20 | MAX17048 SDA, DS3231M SDA, and Qwiic SDA |
+| I2C SCL | 9 | 2 | MAX17048 SCL, DS3231M SCL, and Qwiic SCL |
+| Shared I2S bit clock | 14 | 19 | ICS-43432 SCK, PCM5102A BCK, MAX98357A BCLK |
+| Shared I2S word select | 15 | 3 | ICS-43432 WS, PCM5102A LRCK, MAX98357A LRCLK |
+| Playback data | 16 | 18 | PCM5102A DIN and MAX98357A DIN |
+| Microphone data | 17 | 4 | ICS-43432 SD; LR tied high for slot 1 |
+| Audio power enable | 21 | 6 | BOOST_EN: TPS61023 EN and TPS22917 ON, active high |
+| USB VBUS enable | 18 | 17 | TPS2553 EN, active high |
+| USB host D- | 19 | 5 | USB-C host D- |
+| USB host D+ | 20 | 16 | USB-C host D+ |
+| USB overcurrent, reserved | 38 | 15 | TPS2553 fault output, active low |
 
-U5 pins 11–14 supply regulated **3.3 V** and pins 7–10 are GND, as connected
-in Elecrow's published schematic. Power the microphone VDD, PCM5102 VIN,
-fuel-gauge VIN, DS3231 VCC, and amplifier BFF's **5V input pad** from 3.3 V for this
-configuration. The BFF's 3V pad does not supply the amplifier. Use short power
-wiring and allow for speaker current when sizing the supply. Higher-power
-speaker operation requires a suitable separate supply with common ground;
-do not inject 5 V into U5's 3.3 V rail.
+U5 pins 11–14 supply regulated **3.3 V** and pins 7–10 are GND. The microphone
+and RTC use the always-on 3.3 V supply. The DAC uses switched `+3V3_AUDIO`,
+and the amplifier uses `+5V_BOOST`. Both switched rails follow GPIO21.
+At boot, BCK, WS, playback data, and USB VBUS enable GPIO18 are driven low
+before GPIO21 goes high. The DAC and boost supplies remain enabled by default,
+including while audio is idle. Opening or closing audio streams leaves GPIO21
+high. GPIO18 is a separate USB-only control and holds USB VBUS off at boot.
 
-The battery connects through the LC709203F's parallel battery sockets to the
-CrowPanel BAT connector. Use a polarity-correct adapter for the different
-connectors. The gauge chip is battery-powered; its VIN connection sets the
-I2C logic level. No thermistor or interrupt wire is required. Fuel-gauge
-compensation uses an assumed 25.0 °C, not a measured temperature.
+The battery connects to J405 and the CrowPanel BAT connector through J406.
+MAX17048 VDD and CELL sense the battery rail; ALRT is unconnected. The gauge
+reports voltage and state of charge. It does not report charging state.
+The CN3165 solar charger operates in
+hardware; its status LEDs and thermistor input are not software telemetry.
 
-`audio0` attaches automatically through the reusable `inmp441` driver. It
-appears as **INMP441 mic + I2S DAC/amp** in audio device information and
+`audio0` attaches automatically through the reusable `ics43432` driver. It
+appears as **ICS-43432 mic + I2S DAC/amp** in audio device information and
 publishes `audio0.capture` as 16 kHz mono and `audio0.playback` as 16 kHz
 stereo. The microphone uses received slot 1. The DAC and amplifier share one
 playback data stream; the DAC provides stereo line output and the amplifier
-plays its default mono mix. The PCM5102 jack requires a line-level load,
-such as powered speakers or a headphone amplifier.
+plays the hardware-selected (L+R)/2 mono mix at 9 dB gain. The PCM5102A jack
+requires a line-level load, such as powered speakers or a headphone amplifier.
 
 The 5.79-inch dual-SSD1683 display starts in monochrome pulse mode on both
 SolarWriter and the base CrowPanel 5.79-inch target. It uses the shared EPD
@@ -1112,7 +1142,7 @@ display mode display0 waveform-fr=4
 display mode display0 cleanup-every=64
 display mode display0 cleanup-policy=adaptive
 display mode display0 pulse-scan=async
-display mode display0 pulse-period=67
+display mode display0 pulse-period=auto
 display mode display0 pulse-power=hold
 display mode display0 pulse-ramp=fast
 display mode display0 pulse-spi-khz=20000
@@ -1171,11 +1201,11 @@ Select asynchronous operation with:
 
 ```text
 display mode display0 pulse-scan=async
-display mode display0 pulse-period=67
+display mode display0 pulse-period=auto
 ```
 
 On this dual-controller panel, `pulse-period` requests a minimum new-image
-interval of 67–1000 ms; the default is 67 ms. Settling drives continue as BUSY
+interval of 67–1000 ms when explicitly configured; the default is `auto`. Settling drives continue as BUSY
 permits without waiting for another image slot. When its slot is due, a queued
 target replaces the current target between drives, even with older pixels still
 settling. Pixels whose target is unchanged retain their remaining budgets.
@@ -1227,8 +1257,8 @@ moving black and dithered patches and a stationary shade ramp, then holds the
 final image so its pixels can settle. Use the driver statistics and physical
 screen to assess contrast, erased trails, static shades, and the panel seam.
 
-`battery0` attaches automatically at I2C address `0x0b`. Battery capacity
-defaults to 3000 mAh and remains configurable:
+`battery0` attaches automatically through `max17048` at I2C address `0x36`.
+Battery capacity defaults to 3000 mAh and remains configurable:
 
 ```text
 expansion devices
@@ -1237,7 +1267,7 @@ battery status
 battery capacity 3000
 ```
 
-`rtc0` attaches automatically through the reusable `ds3231` driver at `0x68`
+The DS3231MZ uses the reusable `ds3231` driver: `rtc0` attaches at `0x68`
 on the same 100 kHz `i2c0` bus as `battery0`. Its driver is included in every
 SolarWriter flavor. The clock stores UTC and supports calendar dates from
 2000–2099 and second-resolution alarms. Set the clock after first power-up or
@@ -1255,12 +1285,23 @@ this profile, so RTC alarms have no GPIO wake signal. The DS3231 has no
 countdown timer; use `schedule` for portable timed actions. See
 [DS3231 usage](expansion.md#ds3231-real-time-clock).
 
-GPIO21 is reserved in the pin metadata and is not available for general GPIO
-or PWM. Plug detection and automatic output switching are not enabled in this
-profile. The PCM5102 board ties its jack switch contacts to audio nets; a
-separate isolated detection circuit is required. Both outputs receive playback
-regardless of plug insertion. GPIO18, GPIO19, GPIO20, and GPIO38 remain free;
-the optional DAC mute and fuel-gauge interrupt signals are not claimed.
+GPIO21 controls the shared audio power rails. Both outputs receive playback
+regardless of plug insertion; the line jack has no isolated detection signal.
+The RTC backup supply uses an 11 mF supercapacitor charged through a diode and
+1 kΩ resistor. RTC INT/SQW and the gauge ALRT pin are unconnected.
+
+GPIO18, GPIO19, GPIO20, and GPIO38 are reserved for the USB-C host circuit and
+are not available as general GPIO, ADC, or PWM. `usb mode host` enables HID
+input on GPIO19/20 and raises GPIO18 to supply VBUS while the CH340/UART
+console remains available. GPIO18 starts low and returns low when hosting
+stops, during explicit sleep, and on startup rollback; it is raised again
+when hosting resumes. `usb status` reports the commanded switch state.
+The USB connector shares the enabled 5 V boost with the speaker; GPIO18
+controls its VBUS switch independently of audio. The TPS2553 provides hardware
+current limiting; GPIO38 overcurrent monitoring is not implemented.
+Qwiic shares `i2c0`; this
+assembled board exposes no unallocated runtime-safe GPIOs on U5. See
+[USB host](usb.host.md) for connections and mode switching.
 
 Build with `pio run -e solar_writer`. The target uses the same 8 MB OTA and
 serial partition layouts as the base CrowPanel.
@@ -1282,7 +1323,7 @@ display mode display0
 ```
 
 Initial pulse defaults are 3 drive cycles, 8 scan frames, FR code 4,
-asynchronous operation, a 100 ms requested minimum new-image interval, supply
+asynchronous operation, hardware completion pacing, supply
 cycling, normal booster ramp, the configured board SPI clock, and adaptive
 cleanup with a baseline of 64. These values are a calibration starting point;
 optical contrast, erasure, ghosting, and achieved cadence require inspection
@@ -1367,10 +1408,10 @@ pio run -e waveshare_esp32_s3_epaper_3_97
 The `seeed_reterminal_e1003` target uses an ESP32-S3R8, 32 MB flash, 8 MB
 PSRAM, and the 10.3-inch ED103TC2 panel with an IT8951 controller. Its native
 landscape geometry is 1872x1404. The default display scale is 3, giving a
-624x468 logical canvas. The USB-C connector exposes the UART bridge;
-UART0 on GPIO43/44 starts a separate console shell alongside the display shell.
-Native USB CDC is disabled because
-GPIO19/20 carry the onboard I2C bus.
+624x468 logical canvas. The display shell starts at boot. The USB-C connector
+exposes UART0 on GPIO43/44 through the UART bridge; start a USB serial shell
+when needed with `session create shell uart0`.
+Native USB CDC is disabled because GPIO19/20 carry the onboard I2C bus.
 
 | Peripheral | Connections |
 | --- | --- |
@@ -1382,37 +1423,86 @@ GPIO19/20 carry the onboard I2C bus.
 | MicroSD | Power enable 39, card detect 15; shared SPI with the display |
 | Microphone | PDM clock 42, data 41, power enable 38 |
 | Buzzer and LED | PWM buzzer 45; active-low green LED 16 |
-| Buttons | GPIO3 confirm/wake; GPIO4 up, hold for BLE pairing; GPIO5 down, hold for app exit |
+| Buttons | GPIO3 confirm/wake; GPIO4 up, hold for BLE pairing; GPIO5 down, hold for two seconds to send Escape |
 | J2 | 3.3 V, ground, GPIO47, GPIO6/ADC, SCL20, SDA19; header power enable 46 |
 
 GPIO47 has no ADC function. Only GPIO6 and GPIO47 are free GPIO/PWM slots;
 GPIO6 is also an ADC slot. The I2C pins on J2 remain owned by `i2c0`.
+The `io` Layout view shows all six J2 positions in pin order, including 3V3 and GND.
+
+The display defaults to 20 MHz SPI writes and 10 MHz reads. Initial controller
+setup uses 10 MHz before selecting the write clock. `display mode display0`
+reports the actual write and read rates.
 
 The display provider uses PSRAM for its monochrome canvas, packed gray image,
 and comparison image. Its transfer buffer uses DMA memory. It reads the
 controller geometry before configuring the panel's -1.4 V VCOM. Indexed and
-RGB565 graphics are converted to 16 gray levels.
+RGB565 graphics retain 16 gray levels internally and use four-level output by default.
+`display mode display0 cleanup-interval=3600` selects timed routine cleanup on
+the next changed image after an hour. The default interval 0 retains the normal
+19-partial-update limit. Initialization, encoding changes, recovery and explicit
+full refresh still require native cleanup. Longer intervals need panel-specific
+optical validation; a fully unchanged image does not trigger a timed refresh.
+
 `display mode display0 refresh=auto` skips unchanged frames and selects DU for binary updates and
 GC16 for grayscale and cleanup. `refresh=full` uses GC16 for every presentation.
-Automatic updates upload and refresh only the changed rectangle, aligned to
-the controller's source-driver boundaries. Binary images use packed 1-bit
-transfers; grayscale uses packed 4-bit transfers. A change between those formats,
+Switching between terminal and raster presentation preserves the retained image;
+an unchanged handoff does not require a cleanup. Repeating the current mode or
+resuming an already-awake panel preserves queued frames. Mode output includes
+`refreshes`, the number of successfully completed physical refreshes; graphics
+worker `frames` also counts accepted composition notifications.
+Automatic updates upload separate changed regions, aligned to the controller's
+source-driver boundaries, then refresh their bounding rectangle once. Dense or
+highly fragmented changes use one upload rectangle. Binary images use packed
+1-bit transfers. Grayscale uses packed 4-bit uploads so the white endpoint is
+preserved. The default `grayscale=4` quantizes output to levels 0, 5, 10 and 15;
+`display mode display0 grayscale=16` enables all 16 gray levels.
+Both grayscale settings use the same transfer size. Native 2-bit uploads are
+not used: the controller maps them to levels 0, 4, 8 and 12, which omit white.
+The retained image keeps its original shades in either mode.
+`display mode display0 grayscale=2` selects monochrome output with ordered
+4x4 dithering and compact 1-bit retained and pending images. Each native image
+uses 328536 bytes instead of 1314144 bytes; asynchronous raster presentation
+uses 1971216 fewer PSRAM bytes across those two images. The shared display
+queue also handles monochrome text with compact targets, saving 1634248
+bytes compared with four- or sixteen-level text presentation. The shared display
+service also selects a monochrome application canvas. `view` decodes to gray
+and draws through that canvas, avoiding its INDEX8 canvas and RGB565 staging
+buffer. Close and reopen graphics apps after changing modes so their working
+buffers follow the new preference. `storage-bpp` and `image-bytes` report the retained image
+format and bytes per image, independently of transfer `bpp`.
+Switching back to `grayscale=4` or `grayscale=16` reallocates 4-bit images;
+new presentations supply their original shades again. Mode changes preserve
+the current mode if allocation fails and establish a full baseline on the next
+presentation. Grayscale selection is runtime-only.
+A change between transfer formats,
 startup, recovery, and periodic cleanup use the full panel. `display mode display0`
 reports the last refresh time, upload/preparation time, waveform wait, rectangle,
-and transfer bit depth. These timings cover the driver refresh, after rendering.
-Native monochrome presentations use the shared e-paper worker: input processing
-continues during panel updates, and newer frames replace queued older frames.
-The worker uses two queued monochrome snapshots and one saved monochrome image
-in PSRAM. The saved image limits conversion and comparison work to changed tiles
-and rectangles. Raster changes are detected as pixels are converted into the
-retained packed image, without a second full grayscale image, so the native
-INDEX8 graphics surface still fits in PSRAM. The worker is stopped and
-joined before synchronous grayscale/raster presentation, mode changes, or power
-transitions; the next native presentation starts it again. Final power-state
-overlays are flushed synchronously. Mode status includes worker counters and
-the last complete worker time, including monochrome conversion.
-If snapshot allocation fails, native presentation falls back to synchronous
-updates; mode status shows `scan=sync`.
+and transfer bit depth, plus upload bytes, chunks and regions. These timings
+cover the driver refresh, after rendering. Bulk uploads use interrupt-driven
+DMA in chunks of up to 4 KiB and release the shared SD bus between chunks.
+Compact full-width images can transfer directly from PSRAM; `dma-direct`
+reports how many bytes of the last upload used that path. Other regions and
+unaligned ends use the bounded DMA staging buffer. Monochrome text preserves
+changed regions through scaling and conversion; compatible presenters combine
+both steps while keeping the native canvas available for overlays and exports.
+Mode status also reports the controller firmware (`fw`) and waveform identity (`lut-id`).
+Monochrome and raster graphics presentations use the shared e-paper worker:
+input processing continues during panel uploads and waveform waits, and newer
+frames replace queued older frames. Image preparation still runs before a
+raster presentation returns; source pixels and palettes can then be reused.
+Disjoint queued raster patches are combined into the next image.
+The native monochrome queue uses two snapshots and one saved monochrome image
+in PSRAM. The saved image limits conversion to changed tiles and rectangles.
+The graphics queue uses a packed 4-bit target alongside the image being
+refreshed. Scaled indexed canvases use raster scaling where possible to avoid
+an additional native-size indexed image.
+Switching between native monochrome and raster presentation, changing modes,
+and power transitions wait for the active worker before releasing its buffers.
+Final power-state overlays are flushed synchronously. Mode status includes
+worker counters and the last complete worker time.
+If queue allocation fails, presentation falls back to synchronous updates;
+mode status shows `scan=sync`.
 Waveform temperature follows the default environmental temperature provider
 (the onboard SHT40 on this board), sampled at most every 30 seconds. Startup
 uses 25 C until the provider is available; failed or out-of-range samples retain
@@ -1452,7 +1542,7 @@ Pins follow the Seeed hardware overview:
 - E-paper: SCK GPIO13, MOSI GPIO14, CS GPIO15, DC GPIO16, RST GPIO17, BUSY GPIO18, EN GPIO47
 - Touch (GT911): SCL GPIO2, SDA GPIO3, INT GPIO21, RST GPIO41, EN GPIO42; 180-degree panel alignment before display rotation.
 - Buttons: AI/Power GPIO4 (tap: light sleep/wake, hold: shutdown), Up GPIO5 (tap: Up arrow, hold for two seconds: BLE pairing), Down GPIO6 (tap: Down arrow, hold for two seconds: app exit); all active-low.
-- Power: PWR_HOLD GPIO45, PWR_LOCK GPIO46
+- Power: PWR_HOLD GPIO45, PWR_LOCK GPIO46; BQ25616 charger enable GPIO39 is configured as an output and driven LOW at boot to enable charging.
 - Console: UART0 GPIO43/44 (CH343 USB-C bridge), DIO flash
 - Sensor I2C: SCL GPIO0, SDA GPIO1; PCF8563 RTC at `0x51`, SHT40 at `0x44`, BQ27220 at `0x55`
 - microSD: shared display SPI bus, MISO GPIO12, CS GPIO8, power GPIO10
@@ -1475,7 +1565,7 @@ An SSD1677 display starts with asynchronous `refresh=pulse` / `waveform=fastwave
 The Sticky panel profile (`panel=1`) uses matching black/white data in both RAM
 planes for its factory full-refresh waveform.
 Pulse mode uses short monochrome drives with per-pixel settling budgets.
-Defaults are 100 ms between new images, five drive cycles, eight scan frames, frame-rate
+Defaults are hardware completion pacing, five drive cycles, eight scan frames, frame-rate
 code 8, retained supplies during settling, and adaptive cleanup with baseline 64.
 `refresh=fast` aliases native `refresh=partial`; `waveform=otp` restores auto.
 If pulse resources cannot be allocated at startup, native auto mode remains available.
@@ -1492,7 +1582,7 @@ SSD2677 uses its own Sticky 3D97 V2 monochrome profile at 20 MHz. Sticky's
 `panel=1` starts in asynchronous `refresh=pulse` / `waveform=fastwave`.
 The driver uploads an SSD2677-specific 535-byte RAM waveform and uses the same
 pixel-budget and scan worker as SSD1677. Defaults are `drive-cycles=8`,
-`pulse-frames=4`, `waveform-fr=5` (85 Hz), `pulse-period=100`,
+`pulse-frames=4`, `waveform-fr=5` (85 Hz), `pulse-period=auto`,
 `pulse-power=hold`, and adaptive cleanup every 64 changed targets. Static
 pixels continue settling after the application stops painting; newer frames
 replace queued targets without waiting for every preceding frame to settle.
@@ -1560,6 +1650,78 @@ Build and flash:
 
     pio run -e seeed_reterminal_sticky
     pio run -e seeed_reterminal_sticky -t upload
+
+## M5Stack Paper Mono
+
+The `m5stack_papermono` target covers M5Stack's Paper Mono (ESP32-S3R8,
+16 MB QIO flash, 8 MB OPI PSRAM). The 3.97-inch SSD1677 panel is used in
+portrait (`U8G2_R3`, 480x800) with the `panel=2` profile. It drives
+the panel's own OTP waveform (Mode 2, as in M5Stack's Paper Mono OTP demo)
+for normal updates and M5GFX's Quality waveform only for full cleans. A
+clean runs on the first frame, for shutdown and sleep frames, with
+`refresh=full`, and when a frame clears a large solid black area such as the
+splash logo. In auto mode it also runs as a safety clean every 50 updates.
+After each clean the controller is reset, so the next OTP update starts from
+the panel's own voltages. The panel high voltage is
+switched off after every update. The M5PM1 double-click cuts power
+without warning the ESP32, so the panel must never be left charged. Display reset
+and power, touch reset/power, LoRa reset, the LoRa antenna switch, SD and
+PDM power, and the IP2315 I2C gate all sit on the M5IOE1 expander at
+address `0x4F`. LoRa_EN and the frontlight PWM live on the M5PM1 at
+`0x6E`. The SYS I2C bus (GPIO47/48) runs at 100 kHz to match the M5PM1
+and M5IOE1 default.
+
+The SX1262 stamp is on SPI3 (MOSI38, MISO40, SCLK39, NSS41, BUSY21,
+DIO1 GPIO5) and defaults to 868 MHz; override the `frequency` binding for
+915 MHz SKUs. Like M5Stack's LoRa example it uses the 3.0 V DIO3 TCXO
+supply and the LDO regulator (`regulator=1`). The ST25R3916 NFC reader is on I2C address `0x50` (IRQ
+GPIO6). NFC power starts off like the T-LoRa-Pager (`nfc power on`).
+
+The onboard devices have the following service names:
+
+| Peripheral | Service name | Connections |
+| --- | --- | --- |
+| E-paper display | `display0` | SPI2, CS16, DC17, BUSY18; reset/power through M5IOE1 |
+| Capacitive touch | `touch0` | FT6336G, I2C `0x38`, IRQ4; reset/power through M5IOE1 |
+| Power manager and frontlight | `pmic0` | M5PM1, I2C `0x6e`, IRQ1 |
+| GPIO controller | `gpiox0` | M5IOE1, I2C `0x4f` |
+| RTC | `rtc0` | RX8130CE, I2C `0x32` |
+| Six-axis IMU | `imu0` | BMI270, I2C `0x68` |
+| MicroSD | `storage0` | Four-bit SDMMC: CLK13, CMD12, D0–D3 on GPIO11/10/9/8; switched power |
+| Buzzer | `audio0` | PWM GPIO42 |
+| Microphone | `mic0` | PDM clock45, data46; power enabled only during capture |
+| LoRa | `radio0` | SX1262 on SPI3, CS41, BUSY21, IRQ5 |
+| NFC-A | `nfc0` | ST25R3916, I2C `0x50`, IRQ6 |
+| USB charger | `charger0` | IP2315, I2C `0x75` behind the M5IOE1 gate |
+
+`battery` reports voltage from `pmic0`; `charger status charger0` reads the
+IP2315 through its gated I2C connection. If the charger enters LED mode after
+USB input power is connected, its status stays undetermined until that input
+power is removed. This target reserves all ESP32 GPIO slots for board functions;
+the I2C and SPI buses remain shared with their onboard devices.
+
+The hardware power button is handled by the M5PM1 (click on/reset, a fast
+double-click within 250 ms off, hold for download), not by an ESP32 GPIO.
+GPIO0 is the M5PM1 BOOT_OUT strapping line. Front buttons A (GPIO2) and B
+(GPIO3) are active-low. A sends Enter on tap, starts BLE keyboard pairing
+when held for two seconds, and wakes suspend or sleep. B is the SolarOS
+KEY: a tap sends Esc and a long press (1.2 s, acting on release) runs the
+same clean shutdown as the `shutdown` command, which draws the power-off
+screen and then cuts power through the M5PM1. `setterm powerkey short|long`
+changes either action. Console is USB Serial/JTAG.
+
+The native USB-C port connects GPIO19 D− and GPIO20 D+, so `usb mode host`
+is available with `service.usb-host`. The port is a power sink (5.1 kΩ CC
+pull-downs, VBUS to the IP2315 charger) and never supplies 5 V; host
+operation needs an externally powered data adapter. See
+[USB host input](usb.host.md).
+
+The target defaults to the `full` flavor. Build it with:
+
+```sh
+pio run -e m5stack_papermono
+```
+
 
 ## Xteink X4 Pro
 
@@ -1859,6 +2021,29 @@ For the N16R8 module, GPIO35, GPIO36, and GPIO37 are reserved by Octal PSRAM and
 must not be exposed as runtime GPIO. The generic DevKitC target also reserves
 GPIO38 and GPIO48 because the onboard RGB LED moved between board revisions.
 Use a revision-specific board profile if one of those pins must be exposed.
+
+## GOOUUU ESP32-S3CAM GPIO
+
+The camera uses weak XCLK output drive at 20 MHz to keep Wi-Fi responsive
+during capture. `camera off` disconnects that clock and holds it low.
+
+GPIO2, GPIO3, GPIO45 and GPIO46 are available for runtime GPIO and PWM. GPIO2
+and GPIO3 also support ADC. GPIO46 supports both input and output on ESP32-S3.
+Configure them explicitly with `gpio mode`, `pwm` or an expansion attachment.
+
+GPIO2 may carry the board's status LED load. GPIO3 and GPIO46 are also labeled
+as onboard switch/shutter signals. Check that circuitry before driving outputs.
+GPIO3, GPIO45 and GPIO46 remain strapping pins during reset. GPIO3 selects a
+JTAG source, GPIO45 can select the flash/PSRAM supply voltage, and GPIO46
+participates in boot-mode and ROM-message selection. External wiring must
+preserve the levels required for boot, including when a peripheral is powered
+before the board. These reset functions are independent of runtime GPIO policy.
+See the [ESP32-S3 datasheet](https://www.espressif.com/documentation/esp32-s3_datasheet_en.pdf)
+for strapping and eFuse overrides.
+
+The runtime GPIO/PWM set is GPIO1-GPIO3, GPIO14, GPIO21, GPIO41, GPIO42 and
+GPIO45-GPIO47. ADC is available on GPIO1-GPIO3 and GPIO14. Camera, USB, PSRAM,
+SDMMC, console UART, BOOT/KEY and WS2812 pin assignments remain reserved.
 
 ## Display Boards
 

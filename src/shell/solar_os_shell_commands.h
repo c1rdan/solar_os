@@ -3,6 +3,14 @@
 #include "solar_os.h"
 #include "solar_os_config.h"
 
+#if SOLAR_OS_PACKAGE_APP_CC
+void solar_os_shell_cmd_cc(solar_os_context_t *ctx, int argc, char **argv);
+#endif
+
+#if SOLAR_OS_PACKAGE_SERVICE_GIT
+void solar_os_shell_cmd_git(solar_os_context_t *ctx, int argc, char **argv);
+#endif
+
 void solar_os_shell_cmd_apps(solar_os_context_t *ctx, int argc, char **argv);
 #if SOLAR_OS_PACKAGE_APP_AGENT
 void solar_os_shell_cmd_agent(solar_os_context_t *ctx, int argc, char **argv);
@@ -16,6 +24,9 @@ void solar_os_shell_cmd_can(solar_os_context_t *ctx, int argc, char **argv);
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_CAMERA
 void solar_os_shell_cmd_camera(solar_os_context_t *ctx, int argc, char **argv);
+#endif
+#if SOLAR_OS_PACKAGE_SERVICE_USB_HOST
+void solar_os_shell_cmd_usb(solar_os_context_t *ctx, int argc, char **argv);
 #endif
 #if SOLAR_OS_PACKAGE_SERVICE_INFERENCE
 void solar_os_shell_cmd_model(solar_os_context_t *ctx, int argc, char **argv);
@@ -194,6 +205,8 @@ void solar_os_shell_cmd_sshkey(solar_os_context_t *ctx, int argc, char **argv);
 #endif
 void solar_os_shell_cmd_status(solar_os_context_t *ctx, int argc, char **argv);
 void solar_os_shell_cmd_stream(solar_os_context_t *ctx, int argc, char **argv);
+void solar_os_shell_cmd_stream_echo(solar_os_context_t *ctx, int argc, char **argv);
+void solar_os_shell_cmd_stream_write(solar_os_context_t *ctx, int argc, char **argv);
 void solar_os_shell_cmd_temperature(solar_os_context_t *ctx, int argc, char **argv);
 void solar_os_shell_cmd_time(solar_os_context_t *ctx, int argc, char **argv);
 void solar_os_shell_cmd_top(solar_os_context_t *ctx, int argc, char **argv);

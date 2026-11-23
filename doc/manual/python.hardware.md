@@ -16,9 +16,11 @@ agent_reference_sections = true
 Available when the firmware includes the battery service.
 
 - `status()`: return battery status with `voltage_mv`, `percent`,
-  `percent_estimated`, `adc_calibrated`, `external_power`, `charging`, and
-  `charging_known`. When `charging_known` is false, `charging` is only a trend
-  estimate.
+  `percent_estimated`, `adc_calibrated`, `external_power`,
+  `external_power_known`, `charging`, and `charging_known`.
+  When `charging_known` is false, `charging` is only a trend
+  estimate. `external_power_known` is true when the provider reports power
+  status directly; otherwise `external_power` is a trend estimate.
 
 Example:
 
@@ -414,6 +416,33 @@ solaros.uart.baud(115200)
 solaros.uart.mode("raw")
 solaros.uart.write(b"AT\r\n")
 print(solaros.uart.read(64, 500))
+```
+
+## `solaros.usb_serial`
+
+Available with `service.usb-serial` in USB host mode. See [USB host](usb.host.md)
+for supported adapters and port names.
+
+- `configure(name[, options])`: query or update a free port; return `baud`,
+  `bits`, `parity`, `stop`, `dtr`, and `rts`. Options use the same keys; parity
+  is `"none"`, `"odd"`, `"even"`, `"mark"`, or `"space"`; stop is `"1"`, `"1.5"`,
+  or `"2"`; DTR/RTS are booleans. Unsupported settings raise an error.
+- `send_break(name, duration_ms)`: request a break for 0 through 65535 ms.
+
+Configure before opening the stream. Both operations require exclusive access
+and fail while another app or stream owns the port. Byte I/O uses
+`solaros.streams`; close the handle before changing settings or USB mode.
+Disconnects fail I/O and do not transfer ownership to a replacement device.
+
+```python
+import solaros
+solaros.usb_serial.configure("usb-serial0", {"baud": 9600, "dtr": True})
+port = solaros.streams.open("usb-serial0", {"direction": "duplex"})
+try:
+    solaros.streams.write(port, b"AT\r\n")
+    print(solaros.streams.read(port, 64, 500))
+finally:
+    solaros.streams.close(port)
 ```
 
 ## Quick reference

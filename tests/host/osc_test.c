@@ -1,10 +1,16 @@
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "solar_os_osc.h"
 #include "solar_os_parameters.h"
+#include "solar_os_stream.h"
+
+static uint64_t now_ms=100;
+uint64_t solar_os_time_uptime_ms(void) { return now_ms; }
+esp_err_t solar_os_time_get_utc_epoch_ms(uint64_t *time) { (void)time;return ESP_ERR_NOT_SUPPORTED; }
 
 static float test_value;
 
@@ -155,6 +161,21 @@ static void test_encoding(void)
     assert(solar_os_osc_encode_int("/button", 1, packet, sizeof(packet),
                                    &length) == ESP_OK);
     assert(packet[length - 1U] == 1U);
+    const float values[] = {1, -.5f, 0, 2, 3, 4, 5, 6};
+    const uint8_t expected_pair[] = {'/', 'x', 0, 0, ',', 'f', 'f', 0,
+        0x3f, 0x80, 0, 0, 0xbf, 0, 0, 0};
+    assert(solar_os_osc_encode_floats("/x",values,2,packet,sizeof(packet),&length)==ESP_OK);
+    assert(length==sizeof(expected_pair) && !memcmp(packet,expected_pair,length));
+    assert(solar_os_osc_encode_floats("/x",values,8,packet,sizeof(packet),&length)==ESP_OK);
+    assert(length==48 && !memcmp(packet+4,",ffffffff\0\0\0",12));
+    /* Complete validation precedes writes to the caller's output buffers. */
+    memset(packet,0xa5,sizeof(packet));length=123;
+    float invalid[]={1,NAN};
+    assert(solar_os_osc_encode_floats("/x",invalid,2,packet,sizeof(packet),&length)==ESP_ERR_INVALID_ARG);
+    assert(solar_os_osc_encode_floats("/x",values,0,packet,sizeof(packet),&length)==ESP_ERR_INVALID_ARG);
+    assert(solar_os_osc_encode_floats("/x",values,9,packet,sizeof(packet),&length)==ESP_ERR_INVALID_ARG);
+    assert(solar_os_osc_encode_floats("/x",values,2,packet,15,&length)==ESP_ERR_INVALID_SIZE);
+    assert(length==123 && packet[0]==0xa5 && packet[63]==0xa5);
 }
 
 static void test_bindings(void)
@@ -217,11 +238,14 @@ static void test_bindings(void)
     assert(solar_os_osc_binding_count() == 1U);
 }
 
+#include "osc_receive_test.inc"
+
 int main(void)
 {
     test_codec_and_dispatch();
     test_encoding();
     test_bindings();
+    test_receivers();
     puts("osc tests passed");
     return 0;
 }

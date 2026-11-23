@@ -145,18 +145,81 @@ Battery limits are configured with the `battery` shell command:
 
 ```text
 battery capacity <mAh>
+battery runtime <hours>
 battery min_voltage <volts>
 battery max_voltage <volts>
 ```
 
 Notes:
 
-- Discharging trend means battery power.
-- Charging trend means external power.
+- `battery` shows a short report with voltage, charge, power, charging, and time
+  left. Use `battery status` for configuration and full monitor statistics.
+- After `Last sample`, `battery status` shows signed estimated current in mA and the
+  trend-line voltage rate in mV/hour for the short and long windows separately.
+  Each voltage line includes the actual window length. Voltage values are
+  positive for a rise and negative for a fall. Current values are positive for
+  discharge and negative for charge. These figures
+  remain available even when a trend is too weak to provide a learned ETA.
+- Estimated current uses `-capacity * voltage_rate / (max_voltage - min_voltage)`.
+  It requires a configured capacity and assumes charge changes linearly with
+  voltage. It is not a current-sensor measurement. Noise or a load change can
+  briefly produce a negative estimate while hardware reports battery power.
+- `battery runtime 48` sets an expected full-charge runtime of 48 hours.
+  Decimal hours are rounded to minutes; the supported range is one minute
+  through 8760 hours. `battery runtime 0` clears the setting. The value is
+  saved across reboots and does not need a battery capacity setting. New valid
+  long-window discharge estimates overwrite this value in NVS as each
+  fifteen-minute average completes. Unchanged values are not written again.
+  Short-window estimates and status reads do not write NVS.
+- With confirmed battery power, the configured runtime supplies time left
+  from the first sample, scaled by the voltage between `min_voltage` and
+  `max_voltage`. For example, halfway through that voltage range gives half
+  the configured runtime. The output labels this as `configured runtime`.
+  `Estimated full charge runtime` appears immediately before `Time left` and
+  uses the same discharge rate, applied to the full configured voltage range.
+  Both lines identify a configured-runtime starting estimate while learning.
+  A clear short or long discharge trend replaces the starting estimate.
+  Without hardware power
+  status, a falling trend is required before showing any time estimate.
+- Power uses the battery provider's hardware status when available, including
+  before the voltage trend is ready. External power does not imply charging;
+  use `charger status` to inspect the charger state and faults.
+- Without hardware charging status, charging is estimated from voltage movement
+  and marked `estimated`. A rise of at least 20 mV between monitor samples no
+  more than two minutes apart detects charging before the five-minute trend
+  is ready. This fast path uses raw voltage, so smoothing and interactive status
+  reads do not delay detection. A matching fall clears the estimate promptly.
+  Once detected, charging remains set while the short-window fitted slope is
+  positive, including rises below the initial trend threshold. A flat or falling
+  fitted slope releases it. Hardware charging status and known absence of
+  external power take priority over the estimate.
+- Trend describes voltage movement. Without hardware power status, a falling
+  trend estimates battery power and a rising trend estimates external power.
+- Time left uses the voltage decline toward `min_voltage` while no external
+  power is present. For slow discharge, the monitor retains up to sixteen
+  hours of fifteen-minute voltage averages. This estimate needs at least an
+  hour between its oldest and newest averages and a measurable voltage drop.
+  It is approximate:
+  battery voltage is not linear with remaining capacity, and changing the
+  system load changes the discharge rate.
+- A hardware power-source change clears both windows and the voltage smoothing,
+  so the immediate voltage step from connecting or disconnecting USB does not
+  become an estimated discharge or charge rate. The sample counter continues;
+  each window collects fresh history. The configured runtime can still supply
+  an initial ETA on battery power. External power suppresses time left while
+  both windows can still report current and voltage movement.
+  Fast inferred charging transitions also clear both windows and smoothing,
+  keeping the voltage step out of current and runtime estimates. Without
+  hardware power status, inferred charging clears long-term discharge history.
+  With confirmed battery power, the long
+  discharge trend can keep the estimate available during brief voltage rebounds.
 - Three consecutive samples at or below `min_voltage`, with an established
-  discharging trend and no inferred external power, request the selected action.
-- The voltage trend needs at least five minutes of history. This check runs
-  only while `batmon` is running.
+  discharging trend and no external power, request the selected action.
+- The short-term voltage trend needs at least five minutes of history.
+  Sampling faster does not shorten the long-term estimate's learning period.
+  History is kept in memory while `batmon` runs; starting it again or rebooting
+  starts a new history. The sample count includes all successful readings,
+  including those already replaced by newer readings or averaged into history.
 - Set `min_voltage` above the board's minimum operating voltage, with margin
   for voltage drop under load. Changing the action does not change the threshold
   or bypass the trend and consecutive-sample checks.
@@ -516,8 +579,8 @@ when its queue is idle.
 
 ## osc
 
-OSC 1.0 IPv4 UDP adapter for automatic incoming native-parameter writes and
-explicit named outbound stream, event-stream, or normalized-control bindings.
+OSC 1.0 IPv4 UDP adapter for incoming native-parameter writes, named scalar
+stream receive bindings, and outbound stream, event-stream or control bindings.
 
 ```text
 job start osc [listen=port] [target=host:port] [peer=ipv4]
@@ -530,10 +593,14 @@ incoming-only job and is required before an outbound binding can send.
 `peer=` accepts one exact IPv4 address and drops all other incoming sources.
 
 The worker owns one UDP socket and a 6 KiB internal stack. It accepts packets
-up to 512 bytes, at most eight parameter updates per packet, immediate bundles
+up to 512 bytes, at most eight parameter or mapped stream updates per packet, immediate bundles
 only, and at most 100 accepted packets per second. Detailed status includes the
 listener, target, peer filter, inbound apply/error counters, outbound
 send/source errors, and the current binding count.
+
+Receive bindings acquire scalar writers on the first valid packet. Stop releases
+those writers without sending another value; each target retains its own
+timeout or hold policy. Bindings remain configured for the next start.
 
 OSC has no authentication or encryption. Start the job only on a trusted LAN,
 SoftAP, or WireGuard path. Bindings are volatile and can be restored from
@@ -546,13 +613,14 @@ HTTP access to the fitted camera as one-shot JPEG images or a single-client
 MJPEG stream.
 
 ```text
-job start cam-webd [qvga|vga] [fps] [auth=none|required]
+job start cam-webd [<width>x<height>|qvga|vga] [fps] [auth=none|required]
 job status cam-webd
 job stop cam-webd
 ```
 
-The defaults are QVGA JPEG at five frames per second with no authentication.
-The optional frame rate is `1..30`; JPEG quality is fixed at 12. Options can be
+The defaults are the camera backend's image dimensions and JPEG quality at five
+frames per second with no authentication. The optional frame rate is `1..30`.
+Use `camera resolutions` to list supported dimensions. Options can be
 given in any order. The job leases the camera as `job:cam-webd` until it stops.
 The shell `camera` command and other camera users report that owner while the
 lease is active.
@@ -600,7 +668,7 @@ RTP/RTCP UDP port pair, SSRC, and sender reports, with a shared RTCP CNAME and
 session start clock.
 
 ```text
-job start rtspd [video=<stream>|none] [audio=<stream>|none] [size=qvga|vga] [fps=0..30] [port=<port>]
+job start rtspd [video=<stream>|none] [audio=<stream>|none] [size=<width>x<height>|qvga|vga] [fps=0..30] [port=<port>]
 job start rtspd video=camera0 audio=none size=qvga fps=10
 job start rtspd video=none audio=audio0.capture
 job start rtspd video=camera0 audio=audio0.capture
@@ -608,13 +676,18 @@ job status rtspd
 job stop rtspd
 ```
 
-Defaults are `video=camera0 audio=none size=qvga fps=5 port=554`. `video=camera`
+Defaults are `video=camera0 audio=none fps=5 port=554`, using the source's
+advertised dimensions and JPEG quality. `video=camera`
 is a compatibility alias for `camera0`. Video selects a typed JPEG frame source
 from `stream list`; opening it holds the same exclusive hardware lease as the camera
 service. At least one source must be enabled. `fps=` is a maximum video
 publication rate, not a
 capture timer; `fps=0` removes the cap. `size=` and `fps=` are invalid with
-`video=none`. JPEG quality is fixed at 12.
+`video=none`. Image dimensions accept `WIDTHxHEIGHT`; `qvga` and `vga` remain
+shortcuts for 320x240 and 640x480. The camera backend rejects unsupported modes.
+
+The publisher keeps Wi-Fi awake while the job runs. Stopping it releases that
+request; other active low-latency services can continue to keep Wi-Fi awake.
 
 Use `stream list` to find available video and audio source IDs. `audio0.capture`
 is the board codec's PCM microphone endpoint when available; `mic0` is a scalar
@@ -641,8 +714,11 @@ Reader workers block on camera/audio availability and immediately publish or
 discard the completed frame/block. They continuously drain idle sources, so
 connecting does not expose a stale camera image or audio backlog. The video
 cap drops newly captured images rather than holding them until a timer expires.
-There is one leased PSRAM camera framebuffer, no JPEG copy or video queue,
-and at most one MTU-sized PCM block. Disabled sources allocate no reader stack.
+The publisher leases one PSRAM camera framebuffer at a time and keeps no
+additional JPEG copy or video queue. OV5640 capture uses two PSRAM framebuffers
+in latest-frame mode so capture can continue while a frame is being sent;
+OV2640 capture uses one. There is at most one MTU-sized PCM block.
+Disabled sources allocate no reader stack.
 Temporary UDP transmit pressure drops the current frame/block and newly
 captured data during a short backoff instead of disconnecting or building a
 queue. Audio sample timestamps advance across dropped blocks. Status reports
@@ -935,6 +1011,7 @@ Defaults:
 | --- | --- |
 | Interval | `60` seconds |
 | Server | `pool.ntp.org` |
+| Wait per sync | `40` seconds, so lwIP can retry one lost packet |
 
 Examples:
 
@@ -990,8 +1067,8 @@ Notes:
 - The provider-local list keeps 32 messages in volatile memory. Universal inbox
   notifications use the mailbox as topic, the `From` header as sender, and the
   subject as title.
-- Body previews are best effort. Full MIME decoding, attachments, SMTP sending,
-  and server-side read-state synchronization remain future work.
+- Body previews are best effort. Full MIME decoding, attachments, sending mail,
+  and synchronizing read state with the server are unsupported.
 
 ## pocsag
 
@@ -1375,6 +1452,10 @@ hides it. Touch strokes reserved for activation or keyboard selection do not
 reach the application underneath; touches outside these regions remain normal
 application input.
 
+When multiple language layouts are configured, Ctrl+Space switches layouts.
+Use `job start screen-keyboard trigger=ctrl+alt+space` for a separate visibility
+toggle, or keep using the edge gesture and `screen-keyboard toggle` command.
+
 Full mode provides letters, numbers, one-shot Shift/Ctrl/Alt, Caps Lock, a
 symbol table, and a navigation page with Tab, Escape, arrows, Home/End,
 Page Up/Down, Delete, and Backspace. Physical Tab cycles the full-mode pages.
@@ -1532,8 +1613,13 @@ new configurations can attach the device directly.
 expansion bus create ps2 ps2kbd clock=gpio17 data=gpio18
 job start ps2-keyboard ps2kbd
 job status ps2-keyboard
+input test ps2-kbd-job
 job stop ps2-keyboard
 ```
+
+The job and a direct keyboard attachment are alternatives. If `keyboard0` is
+already attached to this bus, use it directly or run `expansion detach keyboard0`
+before starting the job.
 
 These commands cover an expansion bus. Boards with an integrated PS/2 keyboard
 declare the bus and a default expansion attachment. On TTGO VGA32 v1.4,
@@ -1541,7 +1627,7 @@ declare the bus and a default expansion attachment. On TTGO VGA32 v1.4,
 with `expansion devices` and `input test keyboard0`.
 
 The bus descriptor owns the CLOCK and DATA pins as `bus:ps2kbd`; the wrapper's
-`ps2-keyboard-job` attachment holds the exclusive lease. Normal and
+`ps2-kbd-job` attachment holds the exclusive lease. Normal and
 extended keys, modifiers, navigation keys, function keys, and keypad usages are
 translated to canonical USB HID identities. The configured `setterm keyboard`
 layout and `setterm keyrate` repeat policy apply equally to BLE and PS/2.

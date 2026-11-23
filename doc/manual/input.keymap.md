@@ -16,9 +16,19 @@ routing. Each registered source starts with its built-in profile and maintains
 its own modifier, Caps, and layer state.
 
 Source mapping and keyboard language layout are separate settings.
-`setterm keyboard us|de` selects how HID usages become characters. Its
+`setterm keyboard us|de|ua|fr|ro` selects how HID usages become characters. Its
 `setterm keymap` alias selects the same language layout; it does not load a
-source mapping file.
+source mapping file. Language layouts are generated from xkeyboard-config;
+see `keymaps/layouts/README.md`.
+
+Use `setterm keyboard us,ua` to save a list and select its first layout.
+Ctrl+Space cycles once per press without saving each switch. The status bar
+shows the active layout as `US`, `UA`, etc. One configured layout disables
+the shortcut; exclusive raw keyboard captures retain their own Ctrl+Space.
+
+With multiple layouts, Ctrl+Space takes priority over the on-screen keyboard.
+Give that job another trigger, for example
+`job start screen-keyboard trigger=ctrl+alt+space`.
 
 ## Discover and control mappings
 
@@ -34,7 +44,7 @@ The first command lists registered input sources and their mapping support.
 layers. Omitting `show` also displays the map. `load` validates a file before
 applying it; `reset` restores the source's built-in profile.
 
-`tca8418`, `inputronic-keyboard`, and `lilygo-pager-keyboard` register physical
+`gpio-matrix`, `tca8418`, `inputronic-keyboard`, and `lilygo-pager-keyboard` register physical
 mapping profiles with modifier, layer, and tap/hold support. Other drivers
 currently appear as `unsupported` until they register a profile. A character
 tap alone does not identify a physical key or provide a real held state.
@@ -61,6 +71,10 @@ selector forms differ. Matrix coordinates are converted using the source's
 registered first ID and row stride. TCA8418 profiles use
 `physical = 1 + row * 10 + col`, including matrices narrower than ten columns.
 Mapping files cannot alter the set of physical IDs or the matrix geometry.
+
+`gpio-matrix` uses contiguous IDs `1 + row * column_count + col`. Its initial
+profile reports raw physical events; load a mapping to assign HID usages or
+logical keys. See [GPIO keyboard matrices](expansion.md#gpio-keyboard-matrices).
 
 For a generic TCA8418 reference map, this changes Q to A and makes Space a
 symbol selector when held; Space+A emits an exclamation mark:
@@ -225,7 +239,7 @@ in Python and no values in Lua; failures raise an exception or error.
 - `solaros.input.keymap_info(name)` reports supported features.
 - `solaros.input.load_keymap(name,path)` and `reset_keymap(name)` apply changes.
 - Mappings last until detach or reboot. Release and press held keys again
-  after applying a map. `setterm keyboard us|de` selects language layout.
+  after applying a map. `setterm keyboard us|de|ua|fr|ro` selects language layout.
 - `python3 scripts/keymap.py create --profile PROFILE --set KEY=ACTION --output PATH`
   creates a sparse mapping from a desktop source checkout.
 - `SOLAR_OS_KEYMAP_PROFILE` with `SOLAR_OS_KEYMAP_FILE`, or `SOLAR_OS_KEYMAPS_FILE`,

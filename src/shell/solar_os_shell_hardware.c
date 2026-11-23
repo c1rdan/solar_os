@@ -52,7 +52,7 @@
 static const char * const disk_subcommands[] = {
     "status", "lsblk", "mount", "umount", "format",
 };
-static const char * const battery_subcommands[] = {"status", "config", "capacity", "min_voltage", "max_voltage"};
+static const char * const battery_subcommands[] = {"status", "config", "capacity", "runtime", "min_voltage", "max_voltage"};
 static const char * const ble_subcommands[] = {
     "status", "enable", "disable", "default", "keepalive", "scan", "pair", "forget", "gatt",
 };
@@ -213,6 +213,19 @@ static void disk_print_status(solar_os_shell_io_t *term)
     solar_os_storage_get_status(status, sizeof(status));
     solar_os_shell_io_printf(term, "Disk: %s\n", status);
     solar_os_shell_io_printf(term, "Mount: %s\n", solar_os_storage_mount_point());
+    /* "Disk:" already shows the flash status unless the SD card is the
+     * default volume. */
+    if (!solar_os_storage_flash_is_mounted() && solar_os_storage_sd_is_mounted()) {
+        solar_os_storage_flash_get_status(status, sizeof(status));
+        solar_os_shell_io_printf(term, "Flash: %s\n", status);
+    }
+    if (solar_os_storage_flash_is_unrecognized()) {
+        solar_os_shell_io_writeln(term,
+            "Flash has no readable FAT volume (often another firmware's data; "
+            "also corruption or a read error). If it held SolarOS data, reboot "
+            "and check again before formatting. To erase it: "
+            "disk format flash --force");
+    }
 }
 
 static void disk_print_lsblk(solar_os_shell_io_t *term)
@@ -264,6 +277,14 @@ static bool disk_print_mounted_volume(solar_os_shell_io_t *term,
                                  block.mount_point);
         return true;
     }
+    for (size_t i = 0; i < solar_os_storage_mount_count(); i++) {
+        solar_os_storage_mount_info_t mount;
+        if (solar_os_storage_get_mount(i, &mount) &&
+            (!strcmp(name, mount.name) || !strcmp(name, mount.mount_point))) {
+            solar_os_shell_io_printf(term, "Disk: mounted %s at %s\n", mount.name, mount.mount_point);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -272,10 +293,10 @@ static void disk_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "usage:");
     solar_os_shell_io_writeln(term, "  disk [status]");
     solar_os_shell_io_writeln(term, "  disk lsblk");
-    solar_os_shell_io_writeln(term, "  disk mount [flash|sd0pN] [mount]");
+    solar_os_shell_io_writeln(term, "  disk mount [volume] [mount]");
     solar_os_shell_io_writeln(term, "  disk mount <image.img> <mount> [partition 1-4]");
     solar_os_shell_io_writeln(term, "  disk create <image.img> <MiB>");
-    solar_os_shell_io_writeln(term, "  disk umount [flash|sd0pN|imgN|mount]");
+    solar_os_shell_io_writeln(term, "  disk umount [flash|sd0pN|usb0|imgN|mount]");
     solar_os_shell_io_writeln(term, "  disk format <flash|sd0|sd0pN> --force");
 }
 
@@ -317,7 +338,10 @@ void solar_os_shell_cmd_disk(solar_os_context_t *ctx, int argc, char **argv)
     }
 
     if (strcmp(argv[1], "mount") == 0 && argc >= 3 &&
-        strcmp(argv[2], "flash") &&
+        strcmp(argv[2], "flash") && strcmp(argv[2], "usb0") &&
+#if SOLAR_OS_PACKAGE_DRIVER_STORAGE_QEMU_HOST
+        strcmp(argv[2], "host") && strcmp(argv[2], "/host") &&
+#endif
         (strncmp(argv[2], "sd0", 3) || strchr(argv[2], '/') || strchr(argv[2], '.'))) {
         if (argc < 4 || argc > 5 || (argc == 5 && (strlen(argv[4]) != 1 || argv[4][0] < '1' || argv[4][0] > '4'))) {
             solar_os_shell_io_writeln(term, "usage: disk mount <image.img> <mount> [partition 1-4]");
@@ -336,7 +360,7 @@ void solar_os_shell_cmd_disk(solar_os_context_t *ctx, int argc, char **argv)
     if (strcmp(argv[1], "mount") == 0) {
         if (argc > 4) {
             solar_os_shell_diag_unexpected(term, "disk mount", argv[4],
-                                           "disk mount [flash|sd0pN] [mount]");
+                                           "disk mount [volume] [mount]");
             return;
         }
 
@@ -362,7 +386,7 @@ void solar_os_shell_cmd_disk(solar_os_context_t *ctx, int argc, char **argv)
     if (strcmp(argv[1], "umount") == 0) {
         if (argc > 3) {
             solar_os_shell_diag_unexpected(term, "disk umount", argv[3],
-                                           "disk umount [flash|sd0pN|mount]");
+                                           "disk umount [flash|sd0pN|usb0|mount]");
             return;
         }
 
@@ -378,7 +402,7 @@ void solar_os_shell_cmd_disk(solar_os_context_t *ctx, int argc, char **argv)
         } else if (shell_print_not_supported(term, "disk", "persistent storage", err)) {
             return;
         } else if (err == ESP_ERR_INVALID_STATE) {
-            solar_os_shell_io_writeln(term, "disk umount failed: storage is busy or not mounted; close guests and unmount images first");
+            solar_os_shell_io_writeln(term, "disk umount failed: storage is busy or not mounted; close files and guests, then unmount images first");
         } else if (err == ESP_ERR_NOT_FOUND) {
             if (argc == 2) {
                 solar_os_shell_io_writeln(term, "Disk: not mounted");
@@ -442,6 +466,7 @@ static void battery_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "  battery [status]");
     solar_os_shell_io_writeln(term, "  battery config");
     solar_os_shell_io_writeln(term, "  battery capacity [mAh]");
+    solar_os_shell_io_writeln(term, "  battery runtime [hours] (full-charge runtime; 0 clears)");
     solar_os_shell_io_writeln(term, "  battery min_voltage [V|mV]");
     solar_os_shell_io_writeln(term, "  battery max_voltage [V|mV]");
 }
@@ -571,6 +596,48 @@ static void battery_print_config(solar_os_shell_io_t *term)
     }
     solar_os_shell_io_printf(term, "Min voltage: %s\n", min_voltage);
     solar_os_shell_io_printf(term, "Max voltage: %s\n", max_voltage);
+    if (config.runtime_min == 0U) {
+        solar_os_shell_io_writeln(term, "Full-charge runtime: unset");
+    } else {
+        solar_os_shell_io_printf(term, "Full-charge runtime: %" PRIu32 " h %" PRIu32 " min\n",
+                                 config.runtime_min / 60U, config.runtime_min % 60U);
+    }
+}
+
+static void battery_print_window_stats(solar_os_shell_io_t *term,
+                                       const char *name,
+                                       const solar_os_battery_window_status_t *window)
+{
+    if (window->current_valid) {
+        solar_os_shell_io_printf(term, "%s window estimated current: %+" PRId32 " mA\n",
+                                 name, window->current_ma);
+    } else {
+        solar_os_shell_io_printf(term, "%s window estimated current: unknown (%s)\n",
+                                 name, window->valid ? "capacity unavailable" : "collecting history");
+    }
+    if (window->valid) {
+        solar_os_shell_io_printf(term,
+                                 "%s window estimated voltage: %+" PRId32
+                                 " mV/hour (%" PRIu32 " s window)\n",
+                                 name, -window->voltage_drop_mvh, window->span_ms / 1000U);
+    } else {
+        solar_os_shell_io_printf(term, "%s window estimated voltage: unknown (collecting history)\n",
+                                 name);
+    }
+}
+
+static void battery_print_time_left(solar_os_shell_io_t *term,
+                                     const solar_os_battery_monitor_status_t *monitor)
+{
+    if (monitor->running && monitor->last_error == ESP_OK &&
+        monitor->sample_count > 0U && monitor->time_left_valid) {
+        char eta[24];
+        battery_format_minutes(monitor->time_left_min, eta, sizeof(eta));
+        solar_os_shell_io_printf(term, "Time left: %s estimated%s\n", eta,
+                                 monitor->time_left_seeded ? " (configured runtime)" : "");
+    } else {
+        solar_os_shell_io_writeln(term, "Time left: unknown");
+    }
 }
 
 static void battery_print_monitor_status(solar_os_shell_io_t *term)
@@ -604,24 +671,29 @@ static void battery_print_monitor_status(solar_os_shell_io_t *term)
                              (unsigned)(monitor.last_voltage_mv % 1000U),
                              (unsigned)monitor.last_percent,
                              age_s);
+    battery_print_window_stats(term, "Short", &monitor.short_window);
+    battery_print_window_stats(term, "Long", &monitor.long_window);
     solar_os_shell_io_printf(term,
                              "Trend: %s, power %s, %" PRId32 " mV/hour\n",
                              solar_os_battery_trend_name(monitor.trend),
                              monitor.external_power ?
                                 "external" :
-                                (monitor.trend == SOLAR_OS_BATTERY_TREND_DISCHARGING ?
+                                (monitor.external_power_known ||
+                                 monitor.trend == SOLAR_OS_BATTERY_TREND_DISCHARGING ?
                                     "battery" : "unknown"),
                              monitor.slope_mvh);
     if (monitor.time_left_valid) {
         char eta[24];
-        battery_format_minutes(monitor.time_left_min, eta, sizeof(eta));
-        solar_os_shell_io_printf(term, "Time left: %s estimated\n", eta);
+        battery_format_minutes(monitor.full_runtime_min, eta, sizeof(eta));
+        solar_os_shell_io_printf(term, "Estimated full charge runtime: %s%s\n", eta,
+                                 monitor.time_left_seeded ? " (configured runtime)" : "");
     } else {
-        solar_os_shell_io_writeln(term, "Time left: unknown");
+        solar_os_shell_io_writeln(term, "Estimated full charge runtime: unknown");
     }
+    battery_print_time_left(term, &monitor);
 }
 
-static void battery_print_status(solar_os_shell_io_t *term)
+static void battery_print_status(solar_os_shell_io_t *term, bool full)
 {
     solar_os_battery_status_t status;
     const esp_err_t err = solar_os_battery_get_status(&status);
@@ -632,6 +704,8 @@ static void battery_print_status(solar_os_shell_io_t *term)
         solar_os_shell_io_printf(term, "battery: read failed: %s\n", solar_os_shell_error_text(err));
         return;
     }
+    solar_os_battery_monitor_status_t monitor;
+    solar_os_battery_monitor_get_status(&monitor);
 
     solar_os_shell_io_printf(term,
                              "Battery: %u.%03u V%s\n",
@@ -646,11 +720,9 @@ static void battery_print_status(solar_os_shell_io_t *term)
                              status.percent_estimated && !status.adc_calibrated ?
                                  " (uncalibrated ADC)" : "");
     const char *power = status.external_power ? "external" : "unknown";
-    if (!status.external_power && status.charging_known && !status.charging) {
+    if (!status.external_power && status.external_power_known) {
         power = "battery";
-    } else if (!status.external_power && !status.charging_known) {
-        solar_os_battery_monitor_status_t monitor;
-        solar_os_battery_monitor_get_status(&monitor);
+    } else if (!status.external_power && !status.external_power_known) {
         if (monitor.running && monitor.trend == SOLAR_OS_BATTERY_TREND_DISCHARGING) {
             power = "battery";
         }
@@ -660,14 +732,20 @@ static void battery_print_status(solar_os_shell_io_t *term)
         solar_os_shell_io_printf(term,
                                  "Charging: %s\n",
                                  status.charging ? "yes" : "no");
+    } else if (status.charging) {
+        solar_os_shell_io_writeln(term, "Charging: yes (estimated)");
+    } else if ((status.external_power_known && !status.external_power) ||
+               (monitor.running && monitor.trend == SOLAR_OS_BATTERY_TREND_DISCHARGING)) {
+        solar_os_shell_io_writeln(term, "Charging: no (estimated)");
     } else {
-        solar_os_shell_io_writeln(term,
-                                  status.charging ?
-                                      "Charging: yes (estimated)" :
-                                      "Charging: unknown");
+        solar_os_shell_io_writeln(term, "Charging: unknown");
     }
-    battery_print_config(term);
-    battery_print_monitor_status(term);
+    if (full) {
+        battery_print_config(term);
+        battery_print_monitor_status(term);
+    } else {
+        battery_print_time_left(term, &monitor);
+    }
 }
 
 static void battery_print_config_result(solar_os_shell_io_t *term,
@@ -714,6 +792,40 @@ static void battery_cmd_capacity(solar_os_shell_io_t *term, int argc, char **arg
 
     const esp_err_t err = solar_os_battery_set_capacity_mah((uint32_t)capacity);
     battery_print_config_result(term, "capacity", err);
+}
+
+static void battery_cmd_runtime(solar_os_shell_io_t *term, int argc, char **argv)
+{
+    if (argc == 2) {
+        solar_os_battery_config_t config;
+        solar_os_battery_get_config(&config);
+        if (config.runtime_min == 0U) {
+            solar_os_shell_io_writeln(term, "Full-charge runtime: unset");
+        } else {
+            solar_os_shell_io_printf(term, "Full-charge runtime: %" PRIu32 " h %" PRIu32 " min\n",
+                                     config.runtime_min / 60U, config.runtime_min % 60U);
+        }
+        return;
+    }
+    if (argc != 3) {
+        solar_os_shell_diag_unexpected(term, "battery runtime", argv[3],
+                                       "battery runtime [hours]");
+        return;
+    }
+
+    char *end = NULL;
+    errno = 0;
+    const double hours = strtod(argv[2], &end);
+    if (errno != 0 || end == argv[2] || *end != '\0' ||
+        !(hours >= 0.0 && hours <= SOLAR_OS_BATTERY_RUNTIME_MAX_MIN / 60U) ||
+        (hours > 0.0 && hours * 60.0 < 0.5)) {
+        solar_os_shell_diag_invalid(term, "battery runtime", "hours", argv[2],
+                                    "0 to 8760 hours, at least one minute; 0 clears",
+                                    "battery runtime [hours]", false);
+        return;
+    }
+    const uint32_t runtime_min = (uint32_t)(hours * 60.0 + 0.5);
+    battery_print_config_result(term, "runtime", solar_os_battery_set_runtime_min(runtime_min));
 }
 
 static void battery_cmd_min_voltage(solar_os_shell_io_t *term, int argc, char **argv)
@@ -776,8 +888,16 @@ void solar_os_shell_cmd_battery(solar_os_context_t *ctx, int argc, char **argv)
 {
     solar_os_shell_io_t *term = terminal(ctx);
 
-    if (argc == 1 || strcmp(argv[1], "status") == 0) {
-        battery_print_status(term);
+    if (argc == 1) {
+        battery_print_status(term, false);
+        return;
+    }
+    if (strcmp(argv[1], "status") == 0) {
+        if (argc != 2) {
+            solar_os_shell_diag_unexpected(term, "battery status", argv[2], "battery status");
+            return;
+        }
+        battery_print_status(term, true);
         return;
     }
 
@@ -795,6 +915,11 @@ void solar_os_shell_cmd_battery(solar_os_context_t *ctx, int argc, char **argv)
         return;
     }
 
+    if (strcmp(argv[1], "runtime") == 0) {
+        battery_cmd_runtime(term, argc, argv);
+        return;
+    }
+
     if (strcmp(argv[1], "min_voltage") == 0) {
         battery_cmd_min_voltage(term, argc, argv);
         return;
@@ -806,7 +931,7 @@ void solar_os_shell_cmd_battery(solar_os_context_t *ctx, int argc, char **argv)
     }
 
     solar_os_shell_diag_subcommand(term, "battery", argc, argv,
-                                   "battery [status|config|capacity|min_voltage|max_voltage] ...",
+                                   "battery [status|config|capacity|runtime|min_voltage|max_voltage] ...",
                                    battery_subcommands,
                                    sizeof(battery_subcommands) / sizeof(battery_subcommands[0]));
 }

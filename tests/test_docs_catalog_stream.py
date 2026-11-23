@@ -28,6 +28,7 @@ FUNCTIONS = (
     "docs_page_metadata",
     "docs_manual_page_bytes",
     "docs_validate_catalog_page",
+    "docs_compare_page_ids",
     "docs_validate_catalog_pages",
     "docs_parse_catalog",
     "docs_manual_index_free",

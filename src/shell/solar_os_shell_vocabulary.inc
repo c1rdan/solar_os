@@ -17,16 +17,16 @@
 #define SOLAR_OS_SHELL_TCP_STREAM_WORD
 #endif
 SOLAR_OS_SHELL_WORDS(display,
-    "list", "layouts", "test", "mode", "orientation", "scale", "relax",
+    "list", "layouts", "test", "mode", "orientation", "scale", "canvas", "relax",
     "join", "unjoin", "split", "unsplit")
 SOLAR_OS_SHELL_WORDS(job, "status", "start", "stop")
 SOLAR_OS_SHELL_WORDS(setterm,
-    "--display", "orientation", "scale", "font", "textsize", "palette",
+    "--display", "orientation", "scale", "font", "textsize", "cursor", "palette",
     "foreground", "background", "statusbar", "brightness", "backlight",
     "profile", "charset", "keyboard", "keymap", "powerkey", "key", "keyrate",
     "typerate", SOLAR_OS_SHELL_BLE_WORD "repeat", "timezone", "startup", "otaurl", "ota")
 SOLAR_OS_SHELL_WORDS(stream,
-    SOLAR_OS_SHELL_BLE_STREAM_WORD SOLAR_OS_SHELL_TCP_STREAM_WORD "list", "status")
+    SOLAR_OS_SHELL_BLE_STREAM_WORD SOLAR_OS_SHELL_TCP_STREAM_WORD "list", "status", "echo", "write")
 SOLAR_OS_SHELL_WORDS(log, "status", "show", "follow", "clear", "level", "sink")
 SOLAR_OS_SHELL_WORDS(port, "list", "status")
 SOLAR_OS_SHELL_WORDS(xfer, "protocols", "send", "recv")

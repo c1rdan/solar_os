@@ -1,8 +1,10 @@
 #include "solar_os_terminal_preferences.h"
 #include <string.h>
+#include <stdatomic.h>
 
 #include "nvs.h"
 #include "solar_os_board.h"
+#include "solar_os_display.h"
 
 #define TERM_NVS_NAMESPACE "terminal"
 #define TERM_NVS_ORIENTATION_KEY "orientation"
@@ -10,6 +12,14 @@
 #define TERM_NVS_TEXT_SIZE_KEY "textsize"
 #define TERM_NVS_PALETTE_KEY "palette"
 #define TERM_NVS_STATUS_BAR_KEY "statusbar"
+#define TERM_NVS_CURSOR_KEY "cursor"
+
+/* Bits: 1 = underscore, 0 = steady. All four saved values, including zero
+ * (block/blink), are explicit overrides. Keep an absent preference distinct
+ * so defaults can follow each display, even when it registers after a query. */
+#define TERM_CURSOR_UNSET 4U
+#define TERM_CURSOR_UNLOADED 5U
+static atomic_uint cursor_preference = ATOMIC_VAR_INIT(TERM_CURSOR_UNLOADED);
 #define TERM_DEFAULT_FONT SOLAR_OS_TERMINAL_FONT_COMPACT
 /* A board may pick a different factory default text size for its panel via
  * SOLAR_OS_BOARD_TERMINAL_DEFAULT_TEXT_SIZE (a solar_os_terminal_text_size_t
@@ -101,6 +111,59 @@ static esp_err_t save_u16(const char *key, uint16_t value)
     }
     nvs_close(nvs);
     return ret;
+}
+
+void solar_os_terminal_get_cursor_preference(solar_os_terminal_cursor_shape_t *shape,
+                                              bool *blink)
+{
+    solar_os_terminal_get_cursor_preference_for_display(NULL, shape, blink);
+}
+
+void solar_os_terminal_get_cursor_preference_for_display(const u8g2_t *u8g2,
+    solar_os_terminal_cursor_shape_t *shape, bool *blink)
+{
+    unsigned value = atomic_load(&cursor_preference);
+    if (value == TERM_CURSOR_UNLOADED) {
+        uint16_t saved = TERM_CURSOR_UNSET;
+        nvs_handle_t nvs;
+        if (nvs_open(TERM_NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+            if (nvs_get_u16(nvs, TERM_NVS_CURSOR_KEY, &saved) != ESP_OK || saved > 3U)
+                saved = TERM_CURSOR_UNSET;
+            nvs_close(nvs);
+        }
+        unsigned expected = TERM_CURSOR_UNLOADED;
+        atomic_compare_exchange_strong(&cursor_preference, &expected, saved);
+        value = atomic_load(&cursor_preference);
+    }
+    if (value == TERM_CURSOR_UNSET) value = solar_os_display_is_epaper(u8g2) ? 1U : 0U;
+    if (shape != NULL) *shape = (solar_os_terminal_cursor_shape_t)(value >> 1U);
+    if (blink != NULL) *blink = (value & 1U) == 0;
+}
+
+esp_err_t solar_os_terminal_set_cursor_preference(solar_os_terminal_cursor_shape_t shape,
+                                                  bool blink)
+{
+    if (shape != SOLAR_OS_TERMINAL_CURSOR_BLOCK &&
+        shape != SOLAR_OS_TERMINAL_CURSOR_UNDERSCORE) return ESP_ERR_INVALID_ARG;
+    const uint16_t value = ((unsigned)shape << 1U) | (blink ? 0U : 1U);
+    const esp_err_t err = save_u16(TERM_NVS_CURSOR_KEY, value);
+    if (err == ESP_OK) atomic_store(&cursor_preference, value);
+    return err;
+}
+
+const char *solar_os_terminal_cursor_shape_name(solar_os_terminal_cursor_shape_t shape)
+{
+    return shape == SOLAR_OS_TERMINAL_CURSOR_UNDERSCORE ? "underscore" : "block";
+}
+
+bool solar_os_terminal_parse_cursor_shape(const char *name,
+                                          solar_os_terminal_cursor_shape_t *shape)
+{
+    if (name == NULL || shape == NULL) return false;
+    if (strcmp(name, "block") == 0) *shape = SOLAR_OS_TERMINAL_CURSOR_BLOCK;
+    else if (strcmp(name, "underscore") == 0) *shape = SOLAR_OS_TERMINAL_CURSOR_UNDERSCORE;
+    else return false;
+    return true;
 }
 
 uint8_t solar_os_terminal_profile_load_scale(const char *display)

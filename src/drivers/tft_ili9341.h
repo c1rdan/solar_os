@@ -30,6 +30,7 @@ typedef struct {
     bool st7789;
     /* ST7365P 320x320 panel used by the Clockwork PicoCalc. */
     bool st7365p;
+    bool gc9a01;
     bool invert_color;
     int power_pin;
     bool power_active_high;

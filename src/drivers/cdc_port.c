@@ -5,9 +5,14 @@
 #include <stdint.h>
 
 #include "driver/usb_serial_jtag.h"
+#include "hal/usb_serial_jtag_ll.h"
+#include "usb_phy_port.h"
+#include "esp_ipc.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static bool ready;
+static int driver_core;
 
 esp_err_t cdc_port_init(const cdc_port_config_t *config)
 {
@@ -16,6 +21,14 @@ esp_err_t cdc_port_init(const cdc_port_config_t *config)
     }
 
     if (!usb_serial_jtag_is_driver_installed()) {
+        esp_err_t pins_ret = usb_phy_port_release_pins();
+        if (pins_ret != ESP_OK) return pins_ret;
+        /* GPIO20 pull-up disable also clears the USB D+ pull-up value.
+         * Restore device pulls as well as controller control before the SDK
+         * enables the USB pads; clearing the override alone leaves D+ low. */
+        const usb_serial_jtag_pull_override_vals_t pulls = {.dp_pu = true};
+        usb_serial_jtag_ll_phy_enable_pull_override(&pulls);
+        usb_serial_jtag_ll_phy_disable_pull_override();
         usb_serial_jtag_driver_config_t driver_config = {
             .tx_buffer_size = (uint32_t)config->tx_buffer_size,
             .rx_buffer_size = (uint32_t)config->rx_buffer_size,
@@ -25,10 +38,37 @@ esp_err_t cdc_port_init(const cdc_port_config_t *config)
             ready = usb_serial_jtag_is_driver_installed();
             return ready ? ESP_OK : ret;
         }
+        driver_core = xPortGetCoreID();
     }
 
     ready = true;
     return ESP_OK;
+}
+
+static void uninstall_on_driver_core(void *arg)
+{
+    *(esp_err_t *)arg = usb_serial_jtag_driver_uninstall();
+}
+
+esp_err_t cdc_port_deinit(void)
+{
+    if (!usb_serial_jtag_is_driver_installed()) {
+        ready = false;
+        return usb_phy_port_release_pins();
+    }
+    esp_err_t ret;
+    if (xPortGetCoreID() == driver_core) {
+        ret = usb_serial_jtag_driver_uninstall();
+    } else {
+        const esp_err_t ipc_err = esp_ipc_call_blocking(driver_core,
+            uninstall_on_driver_core, &ret);
+        if (ipc_err != ESP_OK) return ipc_err;
+    }
+    if (ret == ESP_OK) {
+        ready = false;
+        ret = usb_phy_port_release_pins();
+    }
+    return ret;
 }
 
 bool cdc_port_is_ready(void)
@@ -38,7 +78,7 @@ bool cdc_port_is_ready(void)
 
 bool cdc_port_is_connected(void)
 {
-    return usb_serial_jtag_is_connected();
+    return ready && usb_serial_jtag_is_connected();
 }
 
 bool cdc_port_driver_installed(void)

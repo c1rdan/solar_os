@@ -34,6 +34,9 @@
 #include "solar_os_app_registry.h"
 #include "solar_os_board_caps.h"
 #include "solar_os_config.h"
+#if SOLAR_OS_PACKAGE_SERVICE_AOGMANEO
+#include "solar_os_aogmaneo.h"
+#endif
 #if SOLAR_OS_PACKAGE_SERVICE_EMOTION
 #include "solar_os_emotion.h"
 #endif
@@ -359,6 +362,9 @@ typedef enum {
 
 typedef struct {
     python_app_state_t app;
+#if SOLAR_OS_PACKAGE_SERVICE_AOGMANEO
+    solar_os_aogmaneo_context_t aogmaneo;
+#endif
     solar_os_shell_io_t fallback_io;
 #if SOLAR_OS_PACKAGE_SERVICE_MIDI
     solar_os_midi_subscription_t midi_subscription;
@@ -1298,12 +1304,13 @@ static mp_obj_t solaros_battery(void)
         return mp_const_none;
     }
 
-    mp_obj_t dict = mp_obj_new_dict(7);
+    mp_obj_t dict = mp_obj_new_dict(8);
     python_dict_store_int(dict, "voltage_mv", status.voltage_mv);
     python_dict_store_int(dict, "percent", status.percent);
     python_dict_store_bool(dict, "percent_estimated", status.percent_estimated);
     python_dict_store_bool(dict, "adc_calibrated", status.adc_calibrated);
     python_dict_store_bool(dict, "external_power", status.external_power);
+    python_dict_store_bool(dict, "external_power_known", status.external_power_known);
     python_dict_store_bool(dict, "charging", status.charging);
     python_dict_store_bool(dict, "charging_known", status.charging_known);
     return dict;
@@ -1444,7 +1451,7 @@ static mp_obj_t solaros_time_sleep_ms(mp_obj_t duration_obj)
         vTaskDelay(slice > 0 ? slice : 1);
     }
     if (solar_os_micropython_stop_requested()) {
-        mp_raise_type(&mp_type_KeyboardInterrupt);
+        solar_os_micropython_check_interrupt();
     }
     return mp_const_none;
 }
@@ -2787,7 +2794,7 @@ static mp_obj_t solaros_midi_read(size_t n_args, const mp_obj_t *args)
             return mp_const_none;
         }
         if (solar_os_micropython_stop_requested()) {
-            mp_raise_type(&mp_type_KeyboardInterrupt);
+            solar_os_micropython_check_interrupt();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -2883,7 +2890,7 @@ MP_DEFINE_CONST_FUN_OBJ_0(solaros_midi_stream_clear_obj,
 static mp_obj_t python_osc_binding_to_dict(
     const solar_os_osc_binding_info_t *info)
 {
-    mp_obj_t dict = mp_obj_new_dict(22);
+    mp_obj_t dict = mp_obj_new_dict(30);
     python_dict_store_uint(dict, "id", info->id);
     python_dict_store_cstr(dict, "name", info->config.name);
     python_dict_store_cstr(dict, "source_type",
@@ -2891,10 +2898,17 @@ static mp_obj_t python_osc_binding_to_dict(
     python_dict_store_cstr(dict, "value_type",
                            solar_os_osc_value_name(info->config.value_type));
     python_dict_store_cstr(dict, "source", info->config.source);
+    python_dict_store_cstr(dict,"direction",info->config.direction==SOLAR_OS_OSC_RECEIVE?"receive":"send");
+    python_dict_store_uint(dict,"argument",info->config.argument);
+    python_dict_store_bool(dict,"target_available",info->target_available);
+    python_dict_store_bool(dict,"target_claimed",info->target_claimed);
+    python_dict_store_uint(dict,"received",info->received);
+    python_dict_store_uint(dict,"write_errors",info->write_errors);
+    python_dict_store_u64(dict,"last_receive_ms",info->last_receive_ms);
     python_dict_store_cstr(dict, "address", info->config.address);
     python_dict_store_uint(dict, "interval_ms", info->config.interval_ms);
     python_dict_store_float(dict, "rate_hz",
-                            1000.0f / (float)info->config.interval_ms);
+                            info->config.direction==SOLAR_OS_OSC_SEND?1000.0f / (float)info->config.interval_ms:0);
     python_dict_store_float(dict, "delta", info->config.delta);
     python_dict_store_bool(dict, "send_always", info->config.send_always);
     python_dict_store_cstr(dict, "edge",
@@ -2985,6 +2999,16 @@ static mp_obj_t solaros_osc_bind_stream(size_t n_args, const mp_obj_t *args)
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(solaros_osc_bind_stream_obj,
                                     3, 6, solaros_osc_bind_stream);
 
+static mp_obj_t solaros_osc_bind_receive(size_t n_args,const mp_obj_t *args)
+{
+    mp_int_t argument=n_args>3?mp_obj_get_int(args[3]):0;
+    if(argument<0 || argument>=SOLAR_OS_OSC_ARGUMENT_MAX)mp_raise_ValueError(MP_ERROR_TEXT("expected OSC argument index 0..7"));
+    solar_os_osc_binding_config_t config={.direction=SOLAR_OS_OSC_RECEIVE,.argument=(uint32_t)argument};
+    python_osc_binding_strings(&config,args[0],args[1],args[2]);
+    return python_osc_bind_config(&config);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(solaros_osc_bind_receive_obj,3,4,solaros_osc_bind_receive);
+
 static solar_os_osc_edge_t python_osc_edge(mp_obj_t edge_obj)
 {
     const char *edge = mp_obj_str_get_str(edge_obj);
@@ -3040,7 +3064,7 @@ MP_DEFINE_CONST_FUN_OBJ_1(solaros_osc_unbind_obj, solaros_osc_unbind);
 static mp_obj_t solaros_osc_clear(void)
 {
     const size_t removed = solar_os_osc_binding_count();
-    solar_os_osc_clear();
+    python_check_esp(solar_os_osc_clear());
     return mp_obj_new_int_from_uint(removed);
 }
 MP_DEFINE_CONST_FUN_OBJ_0(solaros_osc_clear_obj, solaros_osc_clear);
@@ -3091,6 +3115,7 @@ static mp_obj_t solaros_osc_limits(void)
 {
     mp_obj_t dict = mp_obj_new_dict(7);
     python_dict_store_uint(dict, "packet_max", SOLAR_OS_OSC_PACKET_MAX);
+    python_dict_store_uint(dict,"argument_max",SOLAR_OS_OSC_ARGUMENT_MAX);
     python_dict_store_uint(dict, "address_max", SOLAR_OS_OSC_ADDRESS_MAX - 1U);
     python_dict_store_uint(dict, "bindings_max", SOLAR_OS_OSC_BINDING_MAX);
     python_dict_store_uint(dict, "bundle_depth_max",
@@ -3226,6 +3251,17 @@ static mp_obj_t solaros_encoder_status(mp_obj_t name)
     python_check_esp(solar_os_encoder_status(mp_obj_str_get_str(name), &status));
     mp_obj_t dict = python_encoder_info(&status.info);
     python_dict_store_int(dict, "count", status.count);
+    python_dict_store_float(dict,"ppr",status.config.ppr);
+    python_dict_store_float(dict,"gear_ratio",status.config.gear_ratio);
+    python_dict_store_int(dict,"polarity",status.config.polarity);
+    python_dict_store_bool(dict,"encoder_on_output",status.config.encoder_on_output);
+    python_dict_store_float(dict,"velocity_tau",status.config.velocity_tau);
+    python_dict_store_float(dict,"position_zero",status.config.position_zero);
+    python_dict_store_float(dict,"counts_per_rev",(float)solar_os_native_encoder_counts_per_rev(&status.config,status.info.mode));
+    python_dict_store_float(dict,"velocity",status.feedback.velocity);
+    python_dict_store_float(dict,"position",status.feedback.position);
+    python_dict_store_bool(dict,"velocity_valid",status.feedback.valid);
+    python_dict_store_bool(dict,"claimed",status.claimed);
     return dict;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(solaros_encoder_status_obj, solaros_encoder_status);
@@ -3244,6 +3280,12 @@ static mp_obj_t solaros_encoder_reset(mp_obj_t name)
     return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(solaros_encoder_reset_obj, solaros_encoder_reset);
+static mp_obj_t solaros_encoder_configure(mp_obj_t name,mp_obj_t key,mp_obj_t value)
+{
+    python_check_esp(solar_os_encoder_configure(mp_obj_str_get_str(name),mp_obj_str_get_str(key),(float)mp_obj_get_float(value)));
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_3(solaros_encoder_configure_obj,solaros_encoder_configure);
 #endif
 
 #if SOLAR_OS_PACKAGE_SERVICE_MOTOR
@@ -3285,6 +3327,10 @@ static mp_obj_t solaros_motor_status(mp_obj_t name)
     python_dict_store_bool(dict, "raw_valid", status.raw_valid);
     python_dict_store_uint(dict, "raw_control", status.raw_control);
     python_dict_store_uint(dict, "raw_fault", status.raw_fault);
+    python_dict_store_int(dict,"polarity",status.config.polarity);
+    python_dict_store_float(dict,"max_drive",status.config.max_drive);
+    python_dict_store_bool(dict,"brake",status.config.brake);
+    python_dict_store_bool(dict,"claimed",status.claimed);
     return dict;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(solaros_motor_status_obj, solaros_motor_status);
@@ -3316,6 +3362,12 @@ static mp_obj_t solaros_motor_clear(mp_obj_t name)
     return mp_const_none;
 }
 MP_DEFINE_CONST_FUN_OBJ_1(solaros_motor_clear_obj, solaros_motor_clear);
+static mp_obj_t solaros_motor_configure(mp_obj_t name,mp_obj_t key,mp_obj_t value)
+{
+    python_check_esp(solar_os_motor_configure(mp_obj_str_get_str(name),mp_obj_str_get_str(key),(float)mp_obj_get_float(value)));
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_3(solaros_motor_configure_obj,solaros_motor_configure);
 #endif
 
 #if SOLAR_OS_PACKAGE_SERVICE_SERVO
@@ -3330,13 +3382,16 @@ static mp_obj_t python_servo_info(const solar_os_servo_info_t *info)
     python_dict_store_uint(dict, "freq_hz", info->config.freq_hz);
     python_dict_store_uint(dict, "pulse_min_us", info->config.pulse_min_us);
     python_dict_store_uint(dict, "pulse_max_us", info->config.pulse_max_us);
-    python_dict_store_float(dict, "angle_min_deg", info->config.angle_min_deg);
-    python_dict_store_float(dict, "angle_max_deg", info->config.angle_max_deg);
+    python_dict_store_float(dict, "angle_min_rad", info->config.angle_min_rad);
+    python_dict_store_float(dict, "angle_max_rad", info->config.angle_max_rad);
     python_dict_store_bool(dict, "inverted", info->config.inverted);
     python_dict_store_bool(dict, "enabled", info->enabled);
     python_dict_store_bool(dict, "has_command", info->has_command);
     python_dict_store_uint(dict, "commanded_pulse_us", info->commanded_pulse_us);
-    python_dict_store_float(dict, "commanded_angle_deg", info->commanded_angle_deg);
+    python_dict_store_float(dict, "commanded_angle_rad", info->commanded_angle_rad);
+    python_dict_store_bool(dict,"input_claimed",info->input_claimed);
+    python_dict_store_bool(dict,"stream_writable",info->stream_writable);
+    python_dict_store_bool(dict,"closing",info->closing);
     return dict;
 }
 
@@ -3365,8 +3420,8 @@ static mp_obj_t solaros_servo_open(size_t n_args, const mp_obj_t *args)
         .output = python_pwm_output(args[1]),
         .pulse_min_us = python_u32_from_obj(args[2]),
         .pulse_max_us = python_u32_from_obj(args[3]),
-        .angle_min_deg = (float)mp_obj_get_float(args[4]),
-        .angle_max_deg = (float)mp_obj_get_float(args[5]),
+        .angle_min_rad = (float)mp_obj_get_float(args[4]),
+        .angle_max_rad = (float)mp_obj_get_float(args[5]),
         .freq_hz = n_args > 6 ? python_u32_from_obj(args[6]) : SOLAR_OS_SERVO_FREQ_DEFAULT_HZ,
         .inverted = n_args > 7 && mp_obj_is_true(args[7]),
     };
@@ -4598,6 +4653,8 @@ MP_DEFINE_CONST_FUN_OBJ_0(solaros_expansion_devices_obj, solaros_expansion_devic
 static bool python_expansion_key_known(const char *key)
 {
     static const char *const keys[] = {
+        "row0", "row1", "row2", "row3", "row4", "row5", "row6", "row7", "col0", "col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9",
+        "drive", "diodes", "debounce-ms",
         "stream", "timeout-ms", "ready", "clock", "reset-ms", "boot-ms", "reset-active", "max_mv",
         "mode", "invert", "pull", "filter_ns",
         "spi", "cs", "ce", "i2c", "addr", "alt_addr", "uart", "ps2", "gpio", "irq", "int", "reset",
@@ -4815,6 +4872,24 @@ static mp_obj_t solaros_expansion_attach(mp_obj_t driver_obj,
         const char *role;
         solar_os_expansion_binding_kind_t kind;
     } pin_bindings[] = {
+        {"row0", "row0", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row1", "row1", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row2", "row2", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row3", "row3", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row4", "row4", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row5", "row5", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row6", "row6", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row7", "row7", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col0", "col0", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col1", "col1", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col2", "col2", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col3", "col3", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col4", "col4", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col5", "col5", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col6", "col6", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col7", "col7", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col8", "col8", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col9", "col9", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"gpio", "gpio", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"irq", "irq", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"int", "int", SOLAR_OS_EXPANSION_BINDING_GPIO},
@@ -4867,6 +4942,7 @@ static mp_obj_t solaros_expansion_attach(mp_obj_t driver_obj,
                                      -1);
     }
     static const char *const parameter_bindings[] = {
+        "drive", "diodes", "debounce-ms",
         "min", "center", "max", "deadzone", "timeout-ms", "clock", "reset-ms", "boot-ms", "reset-active", "max_mv",
         "mode", "invert", "pull", "filter_ns",
     };
@@ -5900,7 +5976,7 @@ static mp_obj_t solaros_ble_layout(size_t n_args, const mp_obj_t *args)
 
     solar_os_ble_keyboard_layout_t layout;
     if (!solar_os_ble_keyboard_parse_layout(mp_obj_str_get_str(args[0]), &layout)) {
-        mp_raise_ValueError(MP_ERROR_TEXT("expected us or de"));
+        mp_raise_ValueError(MP_ERROR_TEXT("expected us, de, ua, fr or ro"));
     }
     python_check_esp(solar_os_ble_keyboard_set_layout(layout));
     return mp_const_none;
@@ -7347,7 +7423,7 @@ static mp_obj_t solaros_input_read(size_t n_args, const mp_obj_t *args)
             return mp_const_none;
         }
         if (solar_os_micropython_stop_requested()) {
-            mp_raise_type(&mp_type_KeyboardInterrupt);
+            solar_os_micropython_check_interrupt();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -8003,6 +8079,19 @@ static mp_obj_t solaros_gfx_size(void)
 }
 MP_DEFINE_CONST_FUN_OBJ_0(solaros_gfx_size_obj, solaros_gfx_size);
 
+static mp_obj_t python_gfx_bounds(bool panel)
+{
+    const solar_os_display_rect_t r = panel ? solar_os_gfx_panel_bounds(python_current_gfx()) :
+        solar_os_gfx_canvas_bounds(python_current_gfx());
+    mp_obj_t items[] = {mp_obj_new_int(r.x), mp_obj_new_int(r.y),
+        mp_obj_new_int(r.width), mp_obj_new_int(r.height)};
+    return mp_obj_new_tuple(4, items);
+}
+static mp_obj_t solaros_gfx_canvas_bounds(void) { return python_gfx_bounds(false); }
+MP_DEFINE_CONST_FUN_OBJ_0(solaros_gfx_canvas_bounds_obj, solaros_gfx_canvas_bounds);
+static mp_obj_t solaros_gfx_panel_bounds(void) { return python_gfx_bounds(true); }
+MP_DEFINE_CONST_FUN_OBJ_0(solaros_gfx_panel_bounds_obj, solaros_gfx_panel_bounds);
+
 static mp_obj_t solaros_gfx_clear(size_t n_args, const mp_obj_t *args)
 {
     const solar_os_gfx_color_t color =
@@ -8380,12 +8469,15 @@ MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(solaros_gfx_text_obj, 3, 3, solaros_gfx_text
 #endif
 
 #include "solar_os_python_media.inc"
+#include "solar_os_python_usb_serial.inc"
 #include "solar_os_python_imlib.inc"
 #include "solar_os_python_inference.inc"
+#include "solar_os_python_agent.inc"
 #include "solar_os_python_pipeline.inc"
 #include "solar_os_python_dlp.inc"
 #include "solar_os_python_emotion.inc"
 #include "solar_os_python_jet.inc"
+#include "solar_os_python_aogmaneo.inc"
 
 static void python_module_store(mp_obj_t module, const char *name, mp_obj_t value)
 {
@@ -8689,8 +8781,8 @@ esp_err_t solar_os_python_run(const solar_os_script_run_request_t *request,
 
     int stack_top = 0;
     python_runner_control = &control;
-    python_app.vm_active = true;
     mp_embed_init(heap, PYTHON_HEAP_SIZE, &stack_top);
+    python_app.vm_active = true;
     python_register_solaros_module();
     python_setup_import_path(request->input_type == SOLAR_OS_SCRIPT_INPUT_FILE
                                  ? request->input
@@ -8731,6 +8823,7 @@ esp_err_t solar_os_python_run(const solar_os_script_run_request_t *request,
     python_dlp_destroy();
     python_emotion_destroy();
     python_jet_destroy();
+    python_aogmaneo_cleanup();
     python_robot_destroy();
 #if SOLAR_OS_PACKAGE_SERVICE_HTTP_CLIENT
     python_http_stream_destroy();
@@ -8917,8 +9010,8 @@ static void python_task(void *arg)
     }
 
     int stack_top = 0;
-    python_app.vm_active = true;
     mp_embed_init(heap, PYTHON_HEAP_SIZE, &stack_top);
+    python_app.vm_active = true;
     python_register_solaros_module();
     python_setup_import_path(python_app.mode == PYTHON_MODE_SCRIPT
                                  ? python_app.path
@@ -8927,7 +9020,7 @@ static void python_task(void *arg)
     python_setup_interactive_helpers();
 
     if (python_app.stop_requested) {
-        mp_sched_keyboard_interrupt();
+        solar_os_micropython_request_interrupt();
     } else if (python_app.mode == PYTHON_MODE_REPL) {
         success = python_run_repl();
     } else {
@@ -8956,6 +9049,7 @@ static void python_task(void *arg)
         python_dlp_destroy();
         python_emotion_destroy();
         python_jet_destroy();
+        python_aogmaneo_cleanup();
         python_robot_destroy();
 #if SOLAR_OS_PACKAGE_SERVICE_HTTP_CLIENT
         python_http_stream_destroy();
@@ -9384,11 +9478,13 @@ static void python_interrupt(void)
              python_app.vm_active,
              python_app.running,
              python_app.interrupted);
-    python_app.stop_requested = true;
     python_app.interrupted = true;
+    /* Publish stop after queueing the exception so a blocking API consumes
+     * that same interrupt instead of unwinding before it has been queued. */
     if (python_app.vm_active) {
-        mp_sched_keyboard_interrupt();
+        solar_os_micropython_request_interrupt();
     }
+    python_app.stop_requested = true;
 }
 
 static bool python_task_stopped(void *user)
@@ -9422,7 +9518,7 @@ static void python_stop(solar_os_context_t *ctx)
              * worker. Never delete that owner task mid-call.
              * Interpreter cancellation remains active while we wait. */
             while ((__atomic_load_n(&python_media_session, __ATOMIC_ACQUIRE) != NULL ||
-                    python_inference_active() || python_imlib_active() || python_emotion_active() || python_jet_active()) &&
+                    python_inference_active() || python_imlib_active() || python_emotion_active() || python_jet_active() || python_aogmaneo_active()) &&
                    !python_task_stopped(NULL)) {
                 (void)solar_os_script_wait_for_stop(python_task_stopped, NULL,
                     PYTHON_STOP_WAIT_MS, 20U);
@@ -9469,6 +9565,7 @@ static void python_stop(solar_os_context_t *ctx)
     }
     python_emotion_destroy();
     python_jet_destroy();
+    python_aogmaneo_cleanup();
     python_robot_destroy();
     python_gfx_release_target();
 #if SOLAR_OS_PACKAGE_SERVICE_SYNTH

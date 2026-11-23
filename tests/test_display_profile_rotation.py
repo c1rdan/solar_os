@@ -72,11 +72,14 @@ int main(void) {
 #define SOLAR_OS_SESSION_MAX 5
 #define SOLAR_OS_DISPLAY_TARGET_NAME_MAX 20
 typedef struct {unsigned orientation_degrees,scale,font,text_size;bool status_bar_visible;} solar_os_terminal_profile_t;
-typedef struct {solar_os_terminal_profile_t profile;} solar_os_terminal_t;
+typedef struct {solar_os_terminal_profile_t profile;size_t rows,cols;} solar_os_terminal_t;
 typedef struct {bool used,started,suspended,graphics_active,terminal_redraw_requested,snapshot;
     solar_os_terminal_t *terminal;const char *target;} solar_os_session_entry_t;
 static struct {solar_os_session_entry_t sessions[5];solar_os_terminal_t *shell_terminal;} session_state;
 static solar_os_terminal_profile_t registered={.scale=2};
+static size_t requested_rows=12;
+static size_t solar_os_terminal_rows(const solar_os_terminal_t *t) {return t->rows;}
+static size_t solar_os_terminal_cols(const solar_os_terminal_t *t) {return t->cols;}
 static bool session_terminal_target_name(const solar_os_session_entry_t *s,const solar_os_terminal_t *t,char *out,size_t size) {
     (void)t;if(!s)return false;assert(strlen(s->target)<size);strcpy(out,s->target);return true;
 }
@@ -89,7 +92,9 @@ static esp_err_t solar_os_display_set_terminal_profile(const char *name,const so
     registered=*p;return ESP_OK;
 }
 static void solar_os_terminal_get_profile(solar_os_terminal_t *t,solar_os_terminal_profile_t *p) {*p=t->profile;}
-static esp_err_t solar_os_terminal_apply_profile_transient(solar_os_terminal_t *t,const solar_os_terminal_profile_t *p) {t->profile=*p;return ESP_OK;}
+static esp_err_t solar_os_terminal_apply_profile_transient(solar_os_terminal_t *t,const solar_os_terminal_profile_t *p) {
+    t->profile=*p;t->rows=requested_rows;t->cols=20;return ESP_OK;
+}
 static void session_discard_graphics_snapshot(solar_os_session_entry_t *s) {s->snapshot=false;}
 static void session_apply_display_orientation(const char *name,unsigned degrees) {(void)name;(void)degrees;}
 '''
@@ -100,6 +105,7 @@ int main(void) {
     solar_os_terminal_t terminals[5];
     for(int i=0;i<5;i++) {
         terminals[i].profile=registered;
+        terminals[i].rows=12;terminals[i].cols=20;
         session_state.sessions[i]=(solar_os_session_entry_t){.used=true,.started=true,.terminal=&terminals[i],
             .target=i==4?"other0":"display0",.graphics_active=i==1||i==3,.suspended=i==3,.snapshot=true};
     }
@@ -113,7 +119,16 @@ int main(void) {
     }
     changed.scale=3;
     assert(session_set_display_terminal_profile_internal("display0",&changed)==ESP_ERR_INVALID_STATE);
-    assert(registered.scale==2);return 0;
+    assert(registered.scale==2);
+    /* A canvas resize changes geometry even when the profile is unchanged. */
+    requested_rows=10;
+    for(int i=0;i<5;i++) session_state.sessions[i].terminal_redraw_requested=false;
+    assert(session_set_display_terminal_profile_internal("display0",&registered)==ESP_OK);
+    for(int i=0;i<5;i++) {
+        assert(terminals[i].rows==(i==4?12U:10U));
+        assert(session_state.sessions[i].terminal_redraw_requested==(i<3));
+    }
+    return 0;
 }
 '''
         self.run_native(source)
@@ -240,7 +255,8 @@ int main(void) {
 typedef struct {uint16_t width,height;solar_os_display_rotation_t rotation;} u8g2_t;
 typedef struct {solar_os_display_surface_t surface;} index_t;
 typedef struct {u8g2_t *u8g2;index_t *index8;bool dirty;} solar_os_gfx_t;
-typedef struct {uint32_t surface_formats;} solar_os_display_target_t;
+typedef struct {uint32_t surface_formats;bool prefer_mono;} solar_os_display_target_t;
+static bool prefer_mono;
 static unsigned marks,allocations,releases;
 static bool gfx_ready(solar_os_gfx_t *g) {return g && g->u8g2;}
 static bool gfx_uses_index8(solar_os_gfx_t *g) {return g->index8!=NULL;}
@@ -250,8 +266,9 @@ static solar_os_display_rotation_t gfx_rotation(u8g2_t *u) {return u->rotation;}
 static void gfx_mark_index8_all_dirty(solar_os_gfx_t *g) {(void)g;marks++;}
 static void solar_os_gfx_release_surface(solar_os_gfx_t *g) {g->index8=NULL;releases++;}
 static esp_err_t solar_os_gfx_enable_index8(solar_os_gfx_t *g) {(void)g;allocations++;return ESP_OK;}
-static bool solar_os_display_target_name_for_u8g2(u8g2_t *u,char *out,size_t size) {(void)u;(void)out;(void)size;return false;}
-static bool solar_os_display_find_target(const char *name,solar_os_display_target_t *target) {(void)name;(void)target;return false;}
+static bool solar_os_display_target_name_for_u8g2(u8g2_t *u,char *out,size_t size) {(void)u;(void)out;(void)size;return true;}
+static bool solar_os_display_find_target(const char *name,solar_os_display_target_t *target)
+{(void)name;*target=(solar_os_display_target_t){.surface_formats=SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT,.prefer_mono=prefer_mono};return true;}
 '''
         source += production_functions((ROOT / 'src/services/solar_os_gfx.c').read_text(),
                                        ('solar_os_gfx_prepare_surface',))
@@ -271,7 +288,11 @@ int main(void) {
         assert(gfx.index8==&index && index.surface.data==pixels && gfx.dirty);
         assert(!hashes[0]&&!hashes[1]&&!hashes[2]);
     }
-    assert(marks==4 && !allocations && !releases);return 0;
+    assert(marks==4 && !allocations && !releases);
+    gfx.index8=NULL;prefer_mono=true;solar_os_gfx_prepare_surface(&gfx);
+    assert(!allocations); /* Accepted INDEX8 input does not require an INDEX8 canvas. */
+    prefer_mono=false;solar_os_gfx_prepare_surface(&gfx);assert(allocations==1);
+    return 0;
 }
 '''
         self.run_native(source)

@@ -39,6 +39,78 @@ class BoardManifestTest(unittest.TestCase):
         cls.manifest_dir = ROOT / "boards" / "manifests"
         cls.drivers = load_driver_catalog(ROOT / "boards" / "expansion_drivers.toml")
 
+    def test_gpio_matrix_board_profile_preserves_all_eighteen_pins(self):
+        board = load_board_manifest(self.manifest_dir / "esp32_s3_devkitc1_n16r8.toml", self.manifest_dir)
+        pins = [pin["gpio"] for pin in board["pins"] if pin["policy"] == "free"]
+        self.assertGreaterEqual(len(pins), 18)
+        bindings = {f"row{i}": pin for i, pin in enumerate(pins[:8])}
+        bindings.update({f"col{i}": pin for i, pin in enumerate(pins[8:18])})
+        bindings.update({"drive": 1, "diodes": 1, "debounce-ms": 15})
+        for pin in board["pins"]:
+            if pin["gpio"] in pins[:18]:
+                pin["policy"] = "fixed"
+                pin["role"] = "keys0 matrix"
+                pin["adc"] = False
+                pin["pwm"] = False
+        board.setdefault("devices", []).append({"driver": "gpio-matrix", "name": "keys0", "bindings": bindings})
+        validate_board(board, self.drivers)
+        header = generate_header(board, self.drivers)
+        self.assertIn('.driver = "gpio-matrix", .name = "keys0"', header)
+        self.assertIn('.role = "col9"', header)
+        self.assertIn('.role = "debounce-ms", .value = 15', header)
+        self.assertIn("expansion_gpio_matrix", required_packages(board, self.drivers))
+
+    def test_qemu_native_input_keeps_the_uarts_for_console_use(self):
+        board = load_board_manifest(self.manifest_dir / "qemu_esp32s3_rgb.toml", self.manifest_dir)
+        validate_board(board, self.drivers)
+        self.assertEqual(board["defines"]["SOLAR_OS_BOARD_DEFAULT_PORT_SHELL"], '"uart0"')
+        self.assertEqual(board["runtime"]["uart_ports"], ["UART_NUM_1", "UART_NUM_2"])
+        self.assertEqual({d["driver"] for d in board["devices"]}, {"qemu-rgb", "qemu-eth", "qemu-input", "qemu-audio"})
+        self.assertEqual([b["name"] for b in board["buses"] if b["protocol"] == "uart"], ["uart0"])
+        self.assertIn("driver_input_qemu", required_packages(board, self.drivers))
+        for pin in board["pins"]:
+            if pin["gpio"] in (17, 18): self.assertEqual(pin["policy"], "free")
+
+    def test_gc9a01_round_panel_as_primary_display(self) -> None:
+        driver = self.drivers["gc9a01"]
+        self.assertEqual(driver.targets, ("esp32", "esp32s3"))
+        self.assertEqual(driver.package, "driver_display_gc9a01")
+        self.assertTrue((ROOT / "boards/drivers" / f"{driver.board_driver}.cmake").is_file())
+        base = load_board_manifest(self.manifest_dir / "waveshare_esp32_s3_sim7670g_4g.toml", self.manifest_dir)
+        profile = profile_from_expansion({
+            "schema": 1,
+            "base": {"board": base["board"]["id"]},
+            "buses": [{"name": "spi0", "protocol": "spi", "sharing": "shared",
+                       "host": "SPI2_HOST", "sclk": 7, "mosi": 8, "miso": 3,
+                       "cs": [9], "max_transfer_size": 4096}],
+            "devices": [{"name": "round0", "driver": "gc9a01", "detachable": True,
+                         "bindings": {"spi": "spi0", "cs": 9, "dc": 10, "reset": 11,
+                                      "bl": 12, "pwm": 1, "rotation": 2, "clock": 20000}}],
+        }, base, self.drivers, "test_round", "Round TFT", "Custom", "Module")
+        board = merge_board_overlay(base, profile)
+        validate_board(board, self.drivers)
+        header = generate_header(board, self.drivers)
+        self.assertIn('#define SOLAR_OS_BOARD_DISPLAY_CONTROLLER "GC9A01"', header)
+        self.assertIn("#define SOLAR_OS_BOARD_DISPLAY_WIDTH 240", header)
+        self.assertIn("#define SOLAR_OS_BOARD_DISPLAY_HEIGHT 240", header)
+        self.assertIn("#define SOLAR_OS_BOARD_DISPLAY_U8G2_ROTATION U8G2_R2", header)
+        self.assertIn('.role = "clock", .value = 20000', header)
+        self.assertIn("driver_display_gc9a01", required_packages(board, self.drivers))
+        board["devices"][0]["bindings"]["clock"] = 40001
+        with self.assertRaises(ManifestError):
+            validate_board(board, self.drivers)
+
+    def test_ssd1680_catalog_has_an_optional_default_panel(self) -> None:
+        driver = self.drivers["ssd1680"]
+        self.assertEqual(driver.targets, ("esp32", "esp32s3"))
+        self.assertEqual(driver.package, "expansion_ssd1680")
+        self.assertTrue((ROOT / "boards/drivers" / f"{driver.board_driver}.cmake").is_file())
+        specs = {binding.key: binding for binding in driver.bindings}
+        self.assertFalse(specs["panel"].required)
+        self.assertEqual(specs["panel"].allowed, (0,))
+        self.assertEqual(specs["clock"].maximum, 4000)
+        self.assertEqual((specs["rotation"].minimum, specs["rotation"].maximum), (0, 3))
+
     def test_ssd1685_catalog_exposes_reusable_panel_bindings(self) -> None:
         driver = self.drivers["ssd1685"]
         self.assertEqual(driver.targets, ("esp32", "esp32s3"))
@@ -177,17 +249,19 @@ class BoardManifestTest(unittest.TestCase):
                 validate_board(board, self.drivers)
             device["bindings"][key] = original
 
-    def test_solar_writer_preserves_wiring_and_reserves_jack_detect(self) -> None:
+    def test_solar_writer_v01_hardware_and_pin_ownership(self) -> None:
         board = load_board_manifest(self.manifest_dir / "solar_writer.toml", self.manifest_dir)
         validate_board(board, self.drivers)
         self.assertEqual(board["board"]["name"], "SolarWriter")
         self.assertEqual(board["target"]["platformio_board"], "solar_writer")
         devices = {device["name"]: device for device in board["devices"]}
         self.assertEqual(devices["display0"]["bindings"]["startup-pulse"], 1)
+        self.assertEqual(devices["audio0"]["driver"], "ics43432")
         self.assertEqual(devices["audio0"]["bindings"],
-                         {"i2s": 1, "bck": 14, "ws": 15, "din": 17, "dout": 16, "slot": 1})
-        self.assertEqual(devices["battery0"]["bindings"]["addr"], 0x0b)
-        self.assertEqual(devices["battery0"]["bindings"]["capacity"], 3000)
+                         {"i2s": 1, "bck": 14, "ws": 15, "din": 17, "dout": 16,
+                          "slot": 1})
+        self.assertEqual(devices["battery0"]["driver"], "max17048")
+        self.assertEqual(devices["battery0"]["bindings"], {"i2c": "i2c0", "addr": 0x36})
         self.assertEqual(devices["rtc0"]["driver"], "ds3231")
         self.assertEqual(devices["rtc0"]["bindings"], {"i2c": "i2c0", "addr": 0x68})
         self.assertEqual({"display0", "storage0", "audio0", "battery0", "rtc0"}, set(devices))
@@ -196,7 +270,7 @@ class BoardManifestTest(unittest.TestCase):
         bus = next(bus for bus in board["buses"] if bus["name"] == "i2c0")
         self.assertEqual((bus["sda"], bus["scl"], bus["speed_hz"]), (8, 9, 100000))
         for pin in board["pins"]:
-            if pin["gpio"] in (8, 9, 14, 15, 16, 17, 21):
+            if pin["gpio"] in (8, 9, 14, 15, 16, 17, 18, 19, 20, 21, 38):
                 self.assertEqual(pin["policy"], "fixed")
                 self.assertFalse(pin.get("user", False))
                 self.assertFalse(pin.get("pwm", False))
@@ -204,10 +278,16 @@ class BoardManifestTest(unittest.TestCase):
         self.assertEqual([pin["label"] for pin in power], ["3V3"] * 4)
         header = generate_header(board, self.drivers)
         self.assertIn("SOLAR_OS_BOARD_DEFAULT_BATTERY_CAPACITY_MAH 3000U", header)
-        self.assertIn("SOLAR_OS_BOARD_PIN_AUDIO_JACK_DETECT GPIO_NUM_21", header)
-        self.assertIn("SOLAR_OS_BOARD_USER_GPIO_LIST \"18 19 20 38\"", header)
+        self.assertIn("#define SOLAR_OS_BOARD_PIN_USB_VBUS_EN GPIO_NUM_18", header)
+        self.assertIn("#define SOLAR_OS_BOARD_USB_VBUS_ACTIVE_LEVEL 1", header)
+        self.assertIn("#define SOLAR_OS_BOARD_BOOT_OUTPUTS "
+                      "{{GPIO_NUM_14, 0}, {GPIO_NUM_15, 0}, {GPIO_NUM_16, 0}, "
+                      "{GPIO_NUM_18, 0}, {GPIO_NUM_21, 1}}", header)
+        self.assertNotIn("SOLAR_OS_BOARD_PIN_AUDIO_JACK_DETECT", header)
+        self.assertIn('SOLAR_OS_BOARD_USER_GPIO_LIST ""', header)
         self.assertIn("expansion_inmp441", required_packages(board, self.drivers))
-        self.assertIn("lc709203f", required_packages(board, self.drivers))
+        self.assertIn("max17048", required_packages(board, self.drivers))
+        self.assertNotIn("lc709203f", required_packages(board, self.drivers))
         self.assertIn("driver_ds3231", required_packages(board, self.drivers))
         self.assertIn('.driver = "ds3231", .name = "rtc0"', header)
         cmake = generate_cmake(board, self.drivers)
@@ -402,11 +482,18 @@ class BoardManifestTest(unittest.TestCase):
             required_packages(board, self.drivers),
         )
         self.assertEqual(board["build"]["psram_bytes"], 8 * 1024 * 1024)
+        self.assertEqual(board["defines"]["SOLAR_OS_BOARD_CAMERA_XCLK_DRIVE"], "GPIO_DRIVE_CAP_0")
+        self.assertIn("#define SOLAR_OS_BOARD_CAMERA_XCLK_DRIVE GPIO_DRIVE_CAP_0",
+                      generate_header(board, self.drivers))
         pins = {pin["gpio"]: pin for pin in board["pins"]}
         self.assertEqual(
             {gpio for gpio, pin in pins.items() if pin["policy"] == "free"},
-            {1, 14, 21, 41, 42, 47},
+            {1, 2, 3, 14, 21, 41, 42, 45, 46, 47},
         )
+        for gpio in (2, 3, 45, 46):
+            self.assertTrue(pins[gpio]["pwm"])
+        self.assertEqual({gpio for gpio,pin in pins.items() if pin.get("adc")}, {1, 2, 3, 14})
+        self.assertNotIn("input-only", pins[46]["role"])
         devices = {device["name"]: device for device in board["devices"]}
         self.assertEqual(
             devices["storage0"]["bindings"],
@@ -446,6 +533,26 @@ class BoardManifestTest(unittest.TestCase):
                 bindings.update(control)
                 with self.assertRaisesRegex(ManifestError, "either i2c or both siod and sioc"):
                     validate_board(broken, self.drivers)
+
+    def test_freenove_display_registers_fixed_onboard_neopixel(self) -> None:
+        board = load_board_manifest(
+            self.manifest_dir / "freenove_esp32_s3_display_4_0.toml",
+            self.manifest_dir,
+        )
+        validate_board(board, self.drivers)
+        pixels = next(device for device in board["devices"] if device["name"] == "pixels0")
+        self.assertEqual(pixels["driver"], "neopixel")
+        self.assertEqual(pixels["bindings"], {"data": 42, "count": 1})
+        self.assertFalse(pixels.get("detachable", False))
+        pin = next(pin for pin in board["pins"] if pin["gpio"] == 42)
+        self.assertEqual(pin["policy"], "fixed")
+        self.assertFalse(pin.get("expansion", False))
+        self.assertFalse(pin.get("user", False))
+        self.assertIn("expansion_neopixel", required_packages(board, self.drivers))
+        header = generate_header(board, self.drivers)
+        self.assertIn('.driver = "neopixel", .name = "pixels0", .binding_count = 2', header)
+        self.assertIn('.kind = SOLAR_OS_EXPANSION_BINDING_GPIO, .role = "data", .value = 42', header)
+        self.assertIn('.kind = SOLAR_OS_EXPANSION_BINDING_PARAMETER, .role = "count", .value = 1', header)
 
     def test_qdtech_es3n28p_uses_non_touch_fixed_hardware(self) -> None:
         board = load_board_manifest(
@@ -849,9 +956,9 @@ bindings = { gpio = 7 }
         self.assertIn(".miso_pin = GPIO_NUM_NC", header)
 
         too_many_bindings = deepcopy(board)
-        for i in range(17):
+        for i in range(25):
             too_many_bindings["devices"][0]["bindings"][f"extra{i}"] = 0
-        with self.assertRaisesRegex(ManifestError, "more than 16 bindings"):
+        with self.assertRaisesRegex(ManifestError, "more than 24 bindings"):
             validate_board(too_many_bindings, self.drivers)
 
     def test_x4_pro_claims_fixed_peripherals_and_neutral_frontlight(self) -> None:
@@ -1075,10 +1182,10 @@ bindings = { gpio = 7 }
         buses = {bus["name"]: bus for bus in board["buses"]}
         self.assertNotIn("uart1", buses)
         self.assertEqual(buses["uart0"]["port"], "UART_NUM_1")
-        self.assertEqual(buses["uart0"]["baud_rate"], "9600")
+        self.assertEqual(buses["uart0"]["baud_rate"], "38400")
         gnss = next(device for device in board["devices"] if device["name"] == "gnss0")
         self.assertEqual(gnss["driver"], "nmea")
-        self.assertEqual(gnss["bindings"], {"uart": "uart0", "alt_baud": 38400})
+        self.assertEqual(gnss["bindings"], {"uart": "uart0", "alt_baud": 9600})
         self.assertTrue(gnss["detachable"])
         self.assertEqual({pin["connector"] for pin in board["connectors"]}, {"GROVE"})
         self.assertEqual(
@@ -1241,8 +1348,10 @@ bindings = { gpio = 7 }
             {gpio for gpio, pin in pins.items() if pin["policy"] == "free"},
             {4, 8, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48},
         )
-        for gpio in (1, 2, 3, 19, 20, 35, 36, 37, 46):
+        for gpio in (1, 2, 3, 35, 36, 37, 46):
             self.assertEqual(pins[gpio]["policy"], "fixed")
+        for gpio in (19, 20):
+            self.assertEqual(pins[gpio]["policy"], "releasable")
 
         buses = {bus["name"]: bus for bus in board["buses"]}
         self.assertEqual(

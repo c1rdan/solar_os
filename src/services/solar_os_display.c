@@ -67,6 +67,7 @@ typedef struct {
     bool palette_inverted;
     solar_os_terminal_profile_t terminal_profile;
     solar_os_display_scale_t scale;
+    solar_os_display_geometry_t geometry;
     solar_os_display_layer_t *layer;
     uint8_t *layer_original_logical;
     bool layer_color;
@@ -83,6 +84,17 @@ static uint32_t display_background_rgb888 = DISPLAY_DEFAULT_BACKGROUND_RGB888;
 static bool display_colors_loaded;
 
 static bool display_snapshot_slot(size_t slot_index, solar_os_display_target_t *target);
+/* Caller retains a slot reference; callbacks must only read render policy. */
+static bool display_prefers_mono(const display_target_slot_t *slot)
+{
+#if SOLAR_OS_BOARD_HAS_DISPLAY
+    const solar_os_board_display_t *board = slot->board_display;
+    if (board && board->ops && board->ops->prefers_mono)
+        return board->ops->prefers_mono(board);
+#endif
+    return slot->target.prefers_mono ?
+        slot->target.prefers_mono(slot->target.render_context) : slot->target.prefer_mono;
+}
 static int display_find_slot_locked(const char *name);
 static int display_find_slot_by_u8g2_locked(const u8g2_t *u8g2);
 static void display_publish_frame(u8g2_t *u8g2);
@@ -221,7 +233,8 @@ esp_err_t solar_os_display_set_layer(const char *name, const char *owner,
     else if (slot->power_state_active || slot->relax_active || slot->overlay_active ||
         (slot->layer && strcmp(owner, slot->layer_owner))) err = ESP_ERR_INVALID_STATE;
     else if (!slot->layer) {
-        slot->layer_color = (slot->target.frame_formats & SOLAR_OS_DISPLAY_FORMAT_RGB565_BIT) != 0;
+        slot->layer_color = !display_prefers_mono(slot) &&
+            (slot->target.frame_formats & SOLAR_OS_DISPLAY_FORMAT_RGB565_BIT) != 0;
         slot->layer_original_logical = slot->scale.logical_buffer;
         uint32_t foreground, background;
         (void)solar_os_display_get_colors(&foreground, &background);
@@ -544,6 +557,16 @@ static int display_find_slot_by_u8g2_locked(const u8g2_t *u8g2)
     return -1;
 }
 
+bool solar_os_display_is_epaper(const u8g2_t *u8g2)
+{
+    portENTER_CRITICAL(&display_targets_lock);
+    const int index = u8g2 != NULL ? display_find_slot_by_u8g2_locked(u8g2) :
+        display_find_slot_locked(SOLAR_OS_DISPLAY_PRIMARY_TARGET);
+    const bool epaper = index >= 0 && display_targets[index].target.epaper;
+    portEXIT_CRITICAL(&display_targets_lock);
+    return epaper;
+}
+
 static int display_find_slot_by_buffer_locked(const uint8_t *buffer)
 {
     if (buffer == NULL) {
@@ -593,6 +616,7 @@ static bool display_snapshot_slot(size_t slot_index, solar_os_display_target_t *
 #endif
     portEXIT_CRITICAL(&display_targets_lock);
 
+    const bool prefer_mono = display_prefers_mono(slot);
 #if SOLAR_OS_BOARD_HAS_DISPLAY
     if (board_display != NULL) {
         strlcpy(target->driver,
@@ -621,6 +645,7 @@ static bool display_snapshot_slot(size_t slot_index, solar_os_display_target_t *
         }
 #endif
         *target = slot->target;
+        target->prefer_mono = prefer_mono;
         target->native_width = target->width;
         target->native_height = target->height;
         const bool rotated = target->u8g2->cb == U8G2_R1 || target->u8g2->cb == U8G2_R3;
@@ -628,6 +653,8 @@ static bool display_snapshot_slot(size_t slot_index, solar_os_display_target_t *
             slot->scale.physical_info->pixel_width) / slot->scale.factor;
         target->height = (rotated ? slot->scale.physical_info->pixel_width :
             slot->scale.physical_info->pixel_height) / slot->scale.factor;
+        target->panel = slot->geometry.panel;
+        target->canvas = slot->geometry.canvas;
         valid = true;
     }
     if (slot->generation == generation && slot->refs > 0) {
@@ -649,6 +676,13 @@ static void display_init_slot_gfx(display_target_slot_t *slot)
 }
 
 #if SOLAR_OS_BOARD_HAS_DISPLAY
+static esp_err_t display_board_present_canvas(void *context,
+    const solar_os_display_mono_canvas_t *canvas)
+{
+    solar_os_board_display_t *display = context;
+    return display->ops->present_canvas(display,canvas);
+}
+
 static esp_err_t display_register_board_target(solar_os_board_display_t *display)
 {
     solar_os_display_target_t target = {0};
@@ -659,7 +693,9 @@ static esp_err_t display_register_board_target(solar_os_board_display_t *display
     strlcpy(target.role, DISPLAY_BOARD_ROLE, sizeof(target.role));
     target.width = solar_os_board_display_width(display);
     target.height = solar_os_board_display_height(display);
+    target.round = display->round;
     target.ready = solar_os_board_display_ready(display);
+    target.epaper = display->epaper;
     target.brightness_supported = solar_os_board_display_brightness_supported(display);
     target.surface_formats = solar_os_board_display_surface_formats(display);
     target.frame_formats = solar_os_board_display_frame_formats(display);
@@ -668,6 +704,10 @@ static esp_err_t display_register_board_target(solar_os_board_display_t *display
     target.max_stream_pixels_per_second =
         solar_os_board_display_max_stream_pixels_per_second(display);
     target.u8g2 = solar_os_board_display_u8g2(display);
+    if (display->ops->present_canvas) {
+        target.present_canvas = display_board_present_canvas;
+        target.canvas_context = display;
+    }
     if (display->ops->relax != NULL) {
         target.relax = display_board_relax;
         target.relax_context = display;
@@ -802,6 +842,12 @@ esp_err_t solar_os_display_register_target(const solar_os_display_target_t *targ
     slot->target.base_rotation = target->u8g2->cb;
     slot->terminal_profile = terminal_profile;
     solar_os_display_scale_init(&slot->scale, target->u8g2);
+    slot->scale.present_canvas = target->present_canvas;
+    slot->scale.canvas_context = target->canvas_context;
+    solar_os_display_geometry_init(&slot->geometry, slot->scale.physical_info->pixel_width,
+        slot->scale.physical_info->pixel_height, target->round);
+    u8g2_SetUserPtr(target->u8g2, &slot->geometry);
+    solar_os_display_geometry_sync_rotation(target->u8g2);
     slot->terminal_profile.scale = 1;
     slot->palette_inverted = terminal_profile.palette_inverted;
     display_init_slot_gfx(slot);
@@ -870,6 +916,7 @@ esp_err_t solar_os_display_unregister_targets(const char *const *names,
     for (size_t i = 0U; i < count; i++) {
         display_target_slot_t *slot = &display_targets[slot_indices[i]];
         solar_os_display_scale_destroy(&slot->scale);
+        u8g2_SetUserPtr(slot->target.u8g2, NULL);
         portENTER_CRITICAL(&display_targets_lock);
         const uint32_t generation = slot->generation;
         memset(slot, 0, sizeof(*slot));
@@ -1030,6 +1077,7 @@ esp_err_t solar_os_display_set_terminal_profile(
         }
     }
     if (err == ESP_OK) {
+        solar_os_display_geometry_update(&slot->geometry, slot->geometry.rotation, factor);
         portENTER_CRITICAL(&display_targets_lock);
         slot->terminal_profile = *profile;
         slot->terminal_profile.scale = factor;
@@ -1040,6 +1088,30 @@ esp_err_t solar_os_display_set_terminal_profile(
     }
     xSemaphoreGive(mutex);
     display_release_slot_ref(slot_index, generation);
+    return err;
+}
+
+esp_err_t solar_os_display_set_canvas(const char *name, const solar_os_display_rect_t *canvas)
+{
+    if (!display_target_name_valid(name, SOLAR_OS_DISPLAY_TARGET_NAME_MAX)) return ESP_ERR_INVALID_ARG;
+    portENTER_CRITICAL(&display_targets_lock);
+    const int index = display_find_slot_locked(name);
+    if (index < 0) { portEXIT_CRITICAL(&display_targets_lock); return ESP_ERR_NOT_FOUND; }
+    display_target_slot_t *slot = &display_targets[index];
+    slot->refs++;
+    const uint32_t generation = slot->generation;
+    portEXIT_CRITICAL(&display_targets_lock);
+    xSemaphoreTake(slot->present_mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&display_targets_lock);
+    const bool busy = slot->terminal_blocked || slot->overlay_active || slot->relax_active ||
+        slot->power_state_active || slot->layer || strncmp(slot->target.owner, "display-layout:", 15U) == 0;
+    esp_err_t err = busy ? ESP_ERR_INVALID_STATE : ESP_OK;
+    if (err == ESP_OK && !solar_os_display_geometry_set_canvas(&slot->geometry, canvas))
+        err = ESP_ERR_INVALID_ARG;
+    if (err == ESP_OK) slot->terminal_epoch++;
+    portEXIT_CRITICAL(&display_targets_lock);
+    xSemaphoreGive(slot->present_mutex);
+    display_release_slot_ref(index, generation);
     return err;
 }
 
@@ -1117,7 +1189,9 @@ esp_err_t solar_os_display_open_gfx(const char *name,
     const uint32_t surface_formats = slot->target.surface_formats;
     *gfx = opened_gfx;
     portEXIT_CRITICAL(&display_targets_lock);
-    if ((surface_formats & SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT) != 0U) {
+    solar_os_display_target_t target;
+    if (solar_os_display_find_target(name,&target) && !target.prefer_mono &&
+        (surface_formats & SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT) != 0U) {
         (void)solar_os_gfx_enable_index8(opened_gfx);
     }
     return ESP_OK;
@@ -1731,6 +1805,7 @@ esp_err_t solar_os_display_set_controller_mode(const char *name, const char *mod
 #endif
     uint32_t generation = 0;
     size_t slot_index = 0;
+    SemaphoreHandle_t present_mutex = NULL;
     portENTER_CRITICAL(&display_targets_lock);
     const int found_index = display_find_slot_locked(name);
     if (found_index < 0) {
@@ -1746,6 +1821,7 @@ esp_err_t solar_os_display_set_controller_mode(const char *name, const char *mod
     controller_context = slot->target.controller_context;
     controller_mode = slot->target.controller_mode;
     set_controller_mode = slot->target.set_controller_mode;
+    present_mutex = slot->present_mutex;
 #if SOLAR_OS_BOARD_HAS_DISPLAY
     board_display = slot->board_display;
 #endif
@@ -1763,6 +1839,12 @@ esp_err_t solar_os_display_set_controller_mode(const char *name, const char *mod
     slot->refs++;
     portEXIT_CRITICAL(&display_targets_lock);
 
+    /* Controller modes can replace retained images and worker buffers. Keep
+     * presentations outside the driver while it joins and resizes them. */
+    if (present_mutex == NULL || xSemaphoreTake(present_mutex,portMAX_DELAY) != pdTRUE) {
+        display_release_slot_ref(slot_index,generation);
+        return ESP_ERR_INVALID_STATE;
+    }
     const char *current = NULL;
     esp_err_t ret = ESP_ERR_NOT_SUPPORTED;
     if (controller_context != NULL) {
@@ -1776,9 +1858,11 @@ esp_err_t solar_os_display_set_controller_mode(const char *name, const char *mod
             ESP_OK : solar_os_board_display_set_controller_mode(board_display, mode);
 #endif
     }
+    xSemaphoreGive(present_mutex);
     portENTER_CRITICAL(&display_targets_lock);
     slot = &display_targets[slot_index];
     if (slot->generation == generation && slot->refs > 0) {
+        if (ret == ESP_OK && !strncmp(mode,"grayscale=",10)) slot->terminal_epoch++;
         slot->refs--;
     }
     portEXIT_CRITICAL(&display_targets_lock);
@@ -2052,6 +2136,25 @@ esp_err_t solar_os_display_present_surface(
     solar_os_display_surface_t physical_surface;
     display_target_slot_t *scaled_slot = &display_targets[slot_index];
     esp_err_t ret;
+    /* A scaled indexed canvas need not become another native-size INDEX8
+     * image when the raster presenter already performs destination scaling.
+     * Keep the existing surface path for edge clamping and RGB frame export. */
+    if (!scaled_slot->layer && !scaled_slot->export_enabled &&
+        scaled_slot->scale.factor > 1U &&
+        scaled_slot->scale.physical_info->pixel_width % scaled_slot->scale.factor == 0U &&
+        scaled_slot->scale.physical_info->pixel_height % scaled_slot->scale.factor == 0U &&
+        scaled_slot->target.present_frame &&
+        (scaled_slot->target.frame_formats & SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT)) {
+        solar_os_display_raster_t physical;
+        ret = solar_os_display_scale_surface_raster(&scaled_slot->scale,surface,&physical);
+        display_native_begin(scaled_slot);
+        if (ret == ESP_OK) ret = scaled_slot->target.present_frame(scaled_slot->target.frame_context,&physical);
+        display_native_end(scaled_slot);
+        if (ret == ESP_OK) display_activate_pending_overlay_locked(scaled_slot);
+        xSemaphoreGive(present_mutex);
+        display_release_slot_ref(slot_index,generation);
+        return ret;
+    }
     if (scaled_slot->layer) {
         solar_os_display_raster_t composed, physical;
         if (!scaled_slot->target.present_frame || !surface->palette_rgb565 ||
@@ -2454,7 +2557,8 @@ static void display_publish_rgb_frame(u8g2_t *u8g2,
     display_publish_surface(u8g2, &surface);
 }
 
-void solar_os_display_present(u8g2_t *u8g2, solar_os_display_present_mode_t mode)
+void solar_os_display_present_regions(u8g2_t *u8g2, solar_os_display_present_mode_t mode,
+    const solar_os_display_rect_t *areas, size_t count)
 {
     if (u8g2 == NULL) {
         return;
@@ -2507,7 +2611,10 @@ void solar_os_display_present(u8g2_t *u8g2, solar_os_display_present_mode_t mode
         u8g2->tile_buf_ptr = solar_os_display_layer_canvas(layer_slot->layer, true);
         if (layer_slot->scale.factor > 1U) layer_slot->scale.logical_buffer = u8g2->tile_buf_ptr;
     }
-    u8g2_SendBuffer(u8g2);
+    /* Layers can change pixels outside the caller's damage. Their composition
+     * retains the full presentation path until layer damage is available. */
+    if (layer_slot && layer_slot->layer) u8g2_SendBuffer(u8g2);
+    else solar_os_display_send_regions(u8g2,areas,count);
     if (present_mutex != NULL) solar_os_display_scale_begin_native(&layer_slot->scale);
     display_publish_frame(u8g2);
     if (present_mutex != NULL) solar_os_display_scale_end_native(&layer_slot->scale);
@@ -2520,6 +2627,11 @@ void solar_os_display_present(u8g2_t *u8g2, solar_os_display_present_mode_t mode
         xSemaphoreGive(present_mutex);
         display_release_slot_ref(slot_index, generation);
     }
+}
+
+void solar_os_display_present(u8g2_t *u8g2, solar_os_display_present_mode_t mode)
+{
+    solar_os_display_present_regions(u8g2,mode,NULL,0);
 }
 
 void solar_os_display_present_overlay(u8g2_t *u8g2,
@@ -2683,6 +2795,7 @@ esp_err_t solar_os_display_start_frame_export(const char *name)
              (SOLAR_OS_DISPLAY_FORMAT_INDEX8_BIT | SOLAR_OS_DISPLAY_FORMAT_RGB565_BIT)) != 0U;
     portEXIT_CRITICAL(&display_targets_lock);
 
+    color = color && !display_prefers_mono(slot);
     if (xSemaphoreTake(present_mutex, portMAX_DELAY) != pdTRUE) {
         display_release_slot_ref(slot_index, generation);
         return ESP_ERR_INVALID_STATE;

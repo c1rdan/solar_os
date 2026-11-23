@@ -324,7 +324,7 @@ class RuntimeBoundaryTest(unittest.TestCase):
         self.assertIn("solar_os_wifi_latency_acquire", accept)
         self.assertIn("solar_os_wifi_latency_release", cleanup)
         self.assertIn(
-            "wifi_connectionless_active || wifi_latency_owner[0] != '\\0'",
+            "wifi_connectionless_active || wifi_latency_count != 0U",
             wifi,
         )
 
@@ -573,11 +573,8 @@ class RuntimeBoundaryTest(unittest.TestCase):
 
         self.assertIn("solar_os_ble_keyboard_scan_candidate_should_replace", ble)
         self.assertNotIn("hid_keycode_to_char", ble)
-        self.assertIn(
-            "return solar_os_input_set_keyboard_layout(\n"
-            "        (solar_os_input_keyboard_layout_t)value);",
-            ble,
-        )
+        self.assertIn("solar_os_input_set_keyboard_layout(", ble)
+        self.assertNotIn("load_keyboard_layout(", ble)
 
     def test_ble_reconnect_is_scan_gated_to_the_remembered_peer(self):
         ble = (ROOT / "src/services/solar_os_ble_keyboard.c").read_text(

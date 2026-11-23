@@ -29,8 +29,6 @@ SolarOS argues that useful, general-purpose computing can be built on modest har
 
 ## User manual
 
-**The user manual is automatically generated from human validated code by an expert system.**
-
 The [SolarOS User Manual](doc/manual/README.md) is the canonical source for:
 
 - the documentation browsed on GitHub;
@@ -47,6 +45,24 @@ guide. On devices with Wi-Fi, PSRAM, and SD storage, run `help update` to instal
 the signed full manual for the running version. Its guides and scripting API
 references remain available offline while the SD card is mounted. See
 [Browsing and refreshing documentation](doc/manual/help.md) for setup.
+
+## Project version control
+
+Use `git` to version text files and scripts, review diffs, create branches,
+and synchronize small projects with GitHub, Bitbucket or another Git server.
+Public repositories can be cloned over HTTPS without signing in; authenticated
+fetch and push use the device's SSH key. Git is included in the full flavor on
+boards with Wi-Fi and PSRAM. See [Git version control](doc/manual/git.md) for
+setup and workflows.
+
+## C development on the device
+
+The `full` flavor includes the `cc` command and TinyCC compiler on ESP32-S3
+boards with PSRAM. Compile a source file with `cc hello.c -o hello.elf`, then
+run it with `load hello.elf`. Other builds can enable the `cc` firmware group
+or install it with `pkg install cc`. See
+[C development](doc/manual/c.md)
+for a complete example, project builds, and SDK browsing.
 
 ## Scripted vision and model inference
 
@@ -85,8 +101,14 @@ its firmware ROMs: `apple2` starts BASIC and `apple2 file.nib` boots a disk.
 Supply disk images and Game Boy cartridges separately. Files opens `.nib`
 images with Apple II Plus and `.gb` ROMs with Game Boy.
 
-See [Native foreground apps](doc/manual/native-app.md) for installation,
-resource declarations, and the suspend/resume contract.
+The [Commodore 64](doc/manual/app.c64.md) app includes BASIC, KERNAL and
+character ROMs, loads user-supplied `.prg` programs, and supports joystick
+controls and SID audio. Check `pkg available` for a compatible catalog package,
+or copy its built ELF to `modules/apps/c64.elf`.
+
+See [Native ELF modules](doc/manual/native-modules.md) for package management,
+and [Native foreground apps](doc/manual/native-app.md) for resource declarations
+and the suspend/resume contract.
 
 ## Build
 
@@ -113,6 +135,8 @@ pio run -e t_deck_plus
 pio run -e thinknode_m9
 pio run -e waveshare_esp32_s3_sim7670g_4g
 pio run -e waveshare_esp32_s3_epaper_3_97
+pio run -e seeed_reterminal_e1003
+pio run -e m5stack_papermono
 pio run -e xteink_x4_pro
 pio run -e elecrow_crowpanel_esp32_s3_4_2_epaper
 pio run -e elecrow_crowpanel_esp32_s3_5_79_epaper
@@ -125,6 +149,24 @@ pio run -e goouuu_esp32_s3cam
 pio run -t upload
 pio device monitor -b 115200
 ```
+
+To run SolarOS on a computer without an ESP32 board:
+
+```sh
+pio run -e qemu_esp32s3 -t qemu
+pio run -e qemu_esp32s3_rgb -t qemu
+```
+
+These commands build the firmware and launch the selected virtual board. See
+[Running SolarOS in QEMU](doc/manual/qemu.md) for host dependencies, serial
+access, shared storage, audio, display input, and networking.
+
+An upload writes the firmware but leaves the internal storage partition as it
+was. On a board that shipped with other firmware, erase the whole flash before
+the first upload, with `pio run -e <env> -t erase`, or after installing run
+`disk format flash --force` once. Otherwise `disk status` reports the internal
+volume as an unrecognized filesystem (no readable FAT volume) and SolarOS does
+not use it.
 
 The standard flavor is `full`. All classic ESP32 targets default to `classic`:
 ODROID-GO, ESP32-DevKitC V4 WROVER, Freenove WROVER, and TTGO VGA32.
@@ -230,6 +272,7 @@ components remain applicable and must be preserved in redistributions.
 | --- | --- | --- |
 | [Lua 5.4.8](https://www.lua.org/ftp/lua-5.4.8.tar.gz) | Embedded Lua VM and selected standard libraries | MIT; copyright Lua.org, PUC-Rio. The upstream notice is retained in [`lua.h`](components/lua/lua/src/lua.h). |
 | [MicroPython `d901e98349`](https://github.com/micropython/micropython/commit/d901e98349) | Embedded Python runtime | MIT; Damien P. George and MicroPython contributors. Notices are retained in the vendored source files. |
+| [libgit2 1.9.7](components/solaros_git/README.md) | Native Git version control | GPL-2.0 with linking exception; libgit2 contributors. The downloaded source retains `COPYING`, `AUTHORS` and the bundled dependencies' notices. |
 | [ESP-DSP 1.8.x](https://github.com/espressif/esp-dsp) | ESP32-S3 PIE-accelerated DSP kernels | Apache-2.0; Espressif Systems and contributors. The managed component includes the upstream `LICENSE` and notice metadata. |
 | [ESP-DL 3.3.13](https://github.com/espressif/esp-dl/tree/v3.3.13) | Generic resident model inference and ESP32-S3 SIMD kernels | MIT; Espressif Systems and contributors. The managed component retains upstream notices; the local schema copy retains [LICENSE](components/espdl_schema/LICENSE.esp-dl). Reviewed ownership/allocation fixes are applied by [the pinned overlay](scripts/patch_espdl.py). |
 | [FlatBuffers 2.0.8](https://github.com/google/flatbuffers/tree/v2.0.8) | Structural verification of ESP-DL model files | Apache-2.0; Google and contributors. See [provenance](components/espdl_schema/README.solaros.md) and [LICENSE](components/espdl_schema/LICENSE.flatbuffers). |
@@ -242,6 +285,7 @@ components remain applicable and must be preserved in redistributions.
 | [U8g2 `e4a5822`](https://github.com/olikraus/u8g2/commit/e4a582214cd4489307917e5decc8d3ee9597eb4a) | Monochrome graphics, text rendering, and selected display drivers | BSD-2-Clause; olikraus and contributors. See the retained [`LICENSE`](components/u8g2/LICENSE), including its separate font notices. |
 | [libwebp `3757b8a`](https://github.com/webmproject/libwebp/commit/3757b8afeb54e305eaef18502812a9a88b7ed662) | WebP decoding | BSD-3-Clause; Google and contributors. See the retained [`AUTHORS`](components/webp_decoder/libwebp/AUTHORS), [`COPYING`](components/webp_decoder/libwebp/COPYING), and [`PATENTS`](components/webp_decoder/libwebp/PATENTS). |
 | [MeshCore `03b6ef4`](https://github.com/meshcore-dev/MeshCore/commit/03b6ef4b0de98fc70b49ef10a6d0d61f8381fb7a) | Mesh packet, identity, contact, channel, and chat protocol subset | Separate notices are retained for MeshCore, `rweather/Crypto`, and Ed25519. See the [provenance and notice index](src/vendor/meshcore/README.solaros.md). |
+| [microReticulum `85b19b6`](https://github.com/zerokelvin-dev/microReticulum/commit/85b19b62ad19ac5f3f4edb6a2876d7de61215038) with microStore, MsgPack, ArxContainer, ArxTypeTraits, DebugLog and ArduinoJson | Reticulum networking and LXMF messaging | Apache-2.0 for microReticulum and microStore (Chad Attermann and contributors); ISC for the bundled heatshrink; LGPL-2.1-or-later for microStore's Arduino-core `Print.h` and `Stream.h`; MIT for the rest. See [provenance and pins](src/vendor/microreticulum/README.solaros.md) and the retained `LICENSE.*` files. |
 | [Peanut-GB `8e65698`](https://github.com/deltabeard/Peanut-GB/commit/8e656982f08663785794b84823d3e27f856fdb7f) | External Game Boy module emulation and `minigb_apu` audio | MIT; Mahyar Koshkouei, Alex Baines, and contributors. See the retained [provenance and notices](modules/gameboy/main/vendor/peanut_gb/README.solaros.md). |
 | [Reinette II Plus `b272efd`](modules/apple2/README.md) | External Apple II Plus module and 6502 interpreter | MIT; Arthur Ferreira and contributors. See the retained [license and notices](modules/apple2/main/vendor/LICENSE). |
 | [Espressif esp32-doom `085f21b`](modules/doom/README.md) | External DOOM foreground module based on PrBoom 2.5.0 | GPL-2.0-or-later; id Software, PrBoom authors and Espressif. See the retained [license](modules/doom/main/vendor/prboom/COPYING) and [authors](modules/doom/main/vendor/prboom/AUTHORS). |

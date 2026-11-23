@@ -9,16 +9,13 @@ packages_any = []
 +++
 # SolarOS Shell Commands
 
-This document covers built-in shell commands. Foreground applications are
-documented separately in [apps.md](apps.md). Command availability depends on the
-compiled firmware flavor and board capabilities; `commands` shows the commands in
-the running image.
+Built-in commands depend on the firmware flavor and board; `commands` lists those
+installed. See [apps.md](apps.md) for foreground applications.
 
 ## Shell Conventions
 
-Tables fit the current shell width on display and port shells. Long rows are
-clipped at the right edge; trailing values or columns can be omitted. Widen the
-terminal to see more columns. One cell is reserved to prevent automatic wrapping.
+Tables fit the terminal width on display and port shells. Wide rows may be
+clipped; widen a port terminal to see missing columns.
 
 Paths are resolved relative to the current shell directory. The default storage
 volume is presented as `/`. On SD-backed boards, the primary SD card volume also
@@ -279,19 +276,21 @@ job for periodic polling.
 | `pkg` | `pkg remove <module>` | Remove an installed native module. |
 | `pkg` | `pkg unload <library>` | Unload an unused library while keeping its installed file. |
 | `load` | `load <file.elf> [args...]` | Validate, relocate, run, and unload one native ELF module from storage. |
+| `cc` | `cc [--help]`; `cc <source.c> [more.c ...] [-I directory] [-o output.elf]`; `cc build [cc.toml]`; `cc sdk list\|show HEADER\|export NEW_DIRECTORY` | Compile native C applications and browse SDK headers. Included in `full` on ESP32-S3 boards with PSRAM; other builds can enable the `cc` group or install `cc`. Bare `cc` and `cc --help` display usage successfully. See [C development](c.md). |
 | `board` | `board` | Print board ID, name, and capabilities. |
 | `identity` | `identity [status]` | Show the configured user and hostname. |
 | `identity` | `identity user <name>` | Save the SolarOS user and default SSH/SCP username in NVS. |
 | `identity` | `identity hostname <name>` | Save the device hostname in NVS; reboot to update Wi-Fi. |
-| `engine` | `engine [status|reset]` | Print or reset generic engine utilization counters for CPU/SIMD-style backends and vector bulk operations. |
+| `engine` | `engine [status\|reset]` | Print or reset generic engine utilization counters for CPU/SIMD-style backends and vector bulk operations. |
 | `display` | `display [list]`; `display layouts`; `display test <target>`; `display mode <target> [mode]` | List targets and layouts, draw a test pattern, or change driver-specific display settings. |
 | `display` | `display orientation <target> [0\|90\|180\|270]` | Show or change orientation for text, graphics and touch. Runtime only; does not change NVS. |
 | `display` | `display scale <target> [1..4]` | Show or change runtime integer pixel scaling without changing NVS. |
+| `display` | `display canvas <target> [default\|full\|x y width height]` | Query panel/canvas bounds or change the runtime layout rectangle. No persistence. |
 | `display` | `display relax [<target> [seconds]]` | Run timed native black/white recovery cycles on supported EPDs, then restore the saved image and refresh mode. Without arguments, use the first supported display for 1 second. |
 | `dlp` | `dlp serve <display> stream=<byte-stream>`; `dlp status`; `dlp stop <display>` | Receive DLP images on a named display through an exclusive duplex byte stream. See [DLP](apps.md#dlp). |
 | `display` | `display join <name> --horizontal\|--vertical <target> <target> [target ...]`; `display unjoin <name>` | Join two to four physical targets into one logical display, or remove the join. |
 | `display` | `display split <target> --horizontal\|--vertical <first> <second>`; `display unsplit <target>` | Split one physical target into two equal logical viewports, or remove the split. |
-| `input` | `input [status|keyboard|touch|mouse|joystick|dpad|buttons|gesture]` | List all input sources or filter them by semantic class. |
+| `input` | `input [status\|keyboard\|touch\|mouse\|joystick\|dpad\|buttons\|gesture]` | List all input sources or filter them by semantic class. |
 | `input` | `input test <source>` | Show event counters and the last key, pointer, axis, or gesture event accepted from one source. |
 | `input` | `input calibrate <source> [set <min-x> <max-x> <min-y> <max-y> <width> <height>\|reset]` | Show, save, or reset coordinate calibration for an absolute-pointer source. |
 | `input` | `input emit <key\|chord>` | Emit a local key tap, such as `RIGHT`, `ALT+RIGHT`, `ENTER`, or one literal character, through the normal input-focus path. |
@@ -336,18 +335,19 @@ job for periodic polling.
 | `schedule` | `schedule remove <name>` | Remove an entry. |
 | `schedule` | `schedule run <name>` | Run an entry immediately. Only one scheduled shell script can run at a time. |
 | `schedule` | `schedule stop [name]` | Stop the active ringing alarm, optionally only when its name matches. |
-| `setterm` | `setterm` | Open the terminal settings TUI from the display shell. |
+| `setterm` | `setterm` | Display-shell settings: arrows select, PgUp/PgDn page, Enter edits, Esc exits. |
+| `setterm` | `setterm cursor [block\|underscore] [blink\|steady]` | Save the global cursor style. Default: `block steady` on e-paper, `block blink` otherwise. |
 | `setterm` | `setterm --display <target> [orientation\|scale\|font\|textsize\|palette\|statusbar] [value]` | Show or change a named display's profile; orientation and scale are persistent, other targeted settings are volatile. |
 | `setterm` | `setterm scale [1..4]` | Set and save scaling for the current display, or `display0` from a port shell. |
 | `setterm` | `setterm orientation [0\|90\|180\|270]` | Set and save orientation for the current display, or `display0` from a port shell. |
-| `setterm` | `setterm font [mono\|compact]`; `setterm textsize [8\|10\|12\|14\|16\|18\|20]` | Show or set the terminal font and text size. |
+| `setterm` | `setterm font [mono\|compact\|load <pack>\|unload <pack>]`; `setterm textsize [8\|10\|12\|14\|16\|18\|20]` | Show or set the terminal font and text size, and load or unload a font pack for characters the built-in faces lack. |
 | `setterm` | `setterm palette [normal\|inverted]` | Show or set the logical terminal and shared-graphics palette. |
 | `setterm` | `setterm foreground [#RRGGBB]`; `setterm background [#RRGGBB]` | Show or set the persistent RGB terminal theme colors. |
 | `setterm` | `setterm statusbar [show\|hide]` | Show or hide the graphical shell status bar. |
 | `setterm` | `setterm brightness [0..100]` | Show or set display brightness. |
 | `setterm` | `setterm backlight [0..100\|follow]` | Show or set auxiliary lighting, such as the keyboard backlight, independently or following display brightness. |
 | `setterm` | `setterm profile [vt100\|ansi\|dumb]`; `setterm charset [utf8\|ascii]` | Configure escape sequences and TUI glyph output for the current port shell. |
-| `setterm` | `setterm keyboard [us\|de]`; `setterm powerkey [short\|long] [action]` | Show or set the keyboard layout and dedicated KEY action. |
+| `setterm` | `setterm keyboard [<layout>[,<layout>...]]`; `setterm powerkey [short\|long] [action]` | Save keyboard layouts (`us`, `de`, `ua`, `fr`, `ro`) and the dedicated KEY action. Ctrl+Space cycles layouts. |
 | `setterm` | `setterm keyrate [off\|1..60 [delay-ms]]` | Show or set the shared keyboard and button repeat policy. |
 | `setterm` | `setterm ble [default\|on\|off]` | Show or set the BLE preference for the next boot. |
 | `setterm` | `setterm timezone [UTC\|UTC+/-offset\|Europe/Berlin\|POSIX-TZ]` | Show or set the timezone used for local time. |
@@ -363,88 +363,8 @@ Gesture completion lists gesture-capable sources after `source=`, limits
 
 ### Native ELF modules
 
-`load` is the low-level maintainer interface for the native-module runtime. It
-is compiled only for ESP32-S3 boards with PSRAM. The command resolves the ELF
-path through the calling shell's current directory, reads at most 2 MiB into
-PSRAM, validates every ELF header and table boundary, checks for an Xtensa
-ELF32 dynamic object, relocates it into executable PSRAM, and calls its entry
-point with the supplied arguments.
-
-Native modules import the single versioned `solar_os_native_host_v1` symbol.
-The returned function table reports the ABI version, target, firmware version,
-and provides UTF-8 output through the shell that invoked `load`. Its optional
-`get_service` extension discovers versioned image, video, vision and inference
-interfaces; see [Native media and inference](native-media.md). Existing modules
-using the original output-only prefix remain compatible. Arbitrary SolarOS
-internals are not exported through this interface. Native ELF code is not sandboxed; `load` is for trusted,
-maintainer-produced modules only.
-
-ELFs declaring lifecycle-2 app metadata launch through the
-[foreground app runtime](native-app.md), retaining their image while suspended.
-Installed apps launch by module name.
-Ctrl+Alt+Del, Ctrl+] or closing the session requests cooperative shutdown.
-The host restarts the device if shutdown does not finish within five seconds.
-
-The ordinary `load` runner is for short-lived command-style modules. A module must stop
-all of its work and release every callback and resource before its entry point
-returns, because the runner immediately unloads its code and data. Installed
-jobs, drivers, and libraries use separate resident lifecycle ABIs instead of this runner.
-
-The standalone `modules/examples/hello` ESP-IDF project builds a small acceptance
-module.
-
-Official native-module catalogs are versioned with the host firmware. `pkg`
-accepts a catalog only when its ECDSA signature, SolarOS version, ESP target,
-and native ABI match the running firmware. Each downloaded ELF must match the
-signed size and SHA-256, pass the same ELF validation as `load`, and is staged
-before atomic activation. The signed type selects the storage and lifecycle
-boundary: application modules use `/modules/apps/<module>.elf`, jobs use
-`/modules/jobs`, drivers use `/modules/drivers`, and libraries use
-`/modules/libraries`. Every entry separately
-declares its lifecycle ABI and its type-specific native host API size.
-Application lifecycle ABI 1 is the synchronous `main(argc, argv)`
-run-and-unload contract. Job lifecycle ABI 1 registers start, stop, and tick
-callbacks and keeps the ELF resident until the stopped job is removed. Driver
-lifecycle ABI 1 registers a zero-binding utility driver contract and keeps the
-ELF resident until all devices are detached and the module is removed.
-Library lifecycle ABI 1 registers a versioned API table. Consumers acquire
-leases that prevent unloading while calls, objects, or workers use that API.
-Libraries load on demand from installed storage; `pkg unload ID` unloads an
-unused library and retains its file. See [Native libraries](native-library.md).
-Application lifecycle ABI 2 declares a foreground app manifest and runs
-`main(argc, argv)` on its declared worker. Display, input, storage, timing and
-optional audio are provided by the versioned foreground service. Resumable apps
-retain their ELF and guest state across session switches.
-
-Run `pkg` without arguments to open the package manager. It refreshes the
-signed catalog in a worker, marks installed entries with `*`, and lets you
-inspect, install, remove, or refresh modules without blocking screen redraws.
-After a successful catalog check, `pkg install` completion uses that verified
-catalog. `pkg remove` completion and `pkg installed` read the installed module
-directories directly.
-
-Installed application modules are shell commands: the module ID resolves under
-`/modules/apps` after built-in commands, compiled applications, and aliases.
-Command completion lists installed applications. `load` remains available for
-explicit paths and diagnostics. Reinstalling an application from the schema-v1
-layout moves it into `/modules/apps`; `pkg remove` also recognizes the legacy
-flat application path during this transition.
-
-The job and driver acceptance modules exercise their resident paths. Use `pkg install hello-job`,
-then `job start hello-job`, `job status hello-job`, and `job stop hello-job`.
-Use `pkg install hello-driver`, then `expansion attach hello-driver hello0` and
-`expansion detach hello0`. The hello driver claims no GPIO or bus. `pkg remove`
-rejects a running job or a driver with an attached device.
-
-For example:
-
-```text
-pkg available
-pkg installed
-pkg install hello
-hello SolarOS
-pkg remove hello
-```
+See [Native ELF modules](native-modules.md) for loading, installing,
+updating, and removing native apps, jobs, drivers, and libraries.
 
 ### Power, RTC, schedules, and terminal settings
 
@@ -585,8 +505,9 @@ setterm
 setterm --display <target> [orientation|scale|font|textsize|palette|statusbar] [value]
 setterm scale [1..4]
 setterm orientation [0|90|180|270]
-setterm font [mono|compact]
+setterm font [mono|compact|load <pack>|unload <pack>]
 setterm textsize [8|10|12|14|16|18|20]
+setterm cursor [block|underscore] [blink|steady]
 setterm palette [normal|inverted]
 setterm foreground [#RRGGBB]
 setterm background [#RRGGBB]
@@ -595,7 +516,7 @@ setterm brightness [0..100]
 setterm backlight [0..100|follow]
 setterm profile [vt100|ansi|dumb]
 setterm charset [utf8|ascii]
-setterm keyboard [us|de]
+setterm keyboard [<layout>[,<layout>...]]
 setterm powerkey [short|long] [default|off|enter|app-exit|sleep|suspend|deepsleep|shutdown|ble-pair]
 setterm keyrate [off|1..60 [delay-ms]]
 setterm ble [default|on|off]
@@ -603,6 +524,13 @@ setterm timezone [UTC|UTC+/-offset|Europe/Berlin|POSIX-TZ]
 setterm startup [auto|flash|sd]
 setterm otaurl [url]
 ```
+
+`setterm cursor` saves the global local CLI/TUI style across reboots, overriding
+each display's default: `block steady` on e-paper, `block blink` otherwise
+(500 ms per phase). Omitting the mode preserves it. Typing or moving
+makes the cursor visible. Blocks invert the cell to keep text readable. Apps can
+hide the cursor. Graphical apps and external terminal clients keep their own
+cursors.
 
 `setterm backlight` controls all registered auxiliary lights. It accepts a
 percentage from 0 to 100 (0 turns them off), or `follow` to track the primary
@@ -680,6 +608,15 @@ when an SD card is mounted. `sd` always selects SD and is rejected on boards
 without SD support. Use `setterm startup` without a value to show the selected
 source and currently resolved path.
 
+`setterm keyboard us,ua` saves a list and boots in `us`. Ctrl+Space cycles
+once per press without saving. The status bar shows `US`, `UA`, etc.
+A single layout disables switching.
+
+`setterm font load <pack>` loads `fonts/<pack>.sfp` from the default volume
+and `unload` drops it. Text draws characters the built-in faces lack from a
+loaded pack, at every size. The set is saved and restored at boot. Without
+PSRAM only faces that fit in 24 KB load. `setterm font` lists the packs.
+
 `setterm profile` and `setterm charset` are runtime-only and apply to the
 current port shell. From the display shell they print guidance to configure
 them from a port shell. `profile` controls terminal escape sequences;
@@ -721,6 +658,19 @@ and touch coordinates together. Shell output, history and unfinished input are
 preserved. Both `display orientation` and `display scale` are runtime-only,
 including changes made by gesture bindings. `setterm orientation`, `setterm scale`
 and the settings TUI use the same display operations and save their values in NVS.
+
+Every display has panel bounds and a canvas rectangle. Apps and terminal/TUI
+layouts use the canvas size and an origin of `(0, 0)` at its top-left corner.
+Drawing may extend beyond the canvas into the rest of the panel. Rectangular
+panels default to a full-panel canvas; circular panels default to a centered
+inscribed square.
+
+`display canvas display0` reports both bounds. Set a rectangle with
+`display canvas display0 60 60 291 291`; its position and size are measured in
+the current oriented/scaled panel coordinates. `display canvas display0 full`
+uses the entire panel, and `display canvas display0 default` restores the panel
+default. Changes are rejected while graphics or an overlay claims the target.
+Canvas settings disappear at reboot or display removal and never write NVS.
 
 `display scale display0` shows the display's integer pixel scale. Values `1` through
 `4` apply to the entire display canvas, including text, graphics, icons and
@@ -772,10 +722,10 @@ Compact displays omit icons that do not fit before the clock and unread count.
 | Command | Usage | Description |
 | --- | --- | --- |
 | `apps` | `apps` | List registered foreground apps compiled into the firmware. |
-| `agent` | `agent`; `agent new`; `agent ask PROMPT...` | Open a new native LLM agent TUI or make one unsaved foreground request. |
+| `agent` | `agent [--tts] [new\|ask [--image SOURCE] PROMPT...]` | Text/image questions and speech. [Guide](agent.md). |
 | `agent` | `agent list`; `agent resume SLOT`; `agent delete SLOT` | List, restore, or delete durable local conversation slots. |
 | `agent` | `agent status`; `agent tools` | Inspect provider state, request statistics, typed tools, risk, and policy. |
-| `agent` | `agent config endpoint|model|key|reasoning|tools|max-tools VALUE` | Configure the provider and tool policy. |
+| `agent` | `agent config endpoint\|model\|key\|reasoning\|tools\|max-tools VALUE` | Configure the provider and tool policy. |
 | `agent` | `agent script python\|lua (-c SOURCE \| FILE) [ARGS...]` | Run a bounded script through the agent execution path. |
 | `agent` | `agent forget` | Erase the saved agent configuration. |
 | `jobs` | `jobs` | List registered jobs and their state. |
@@ -783,7 +733,7 @@ Compact displays omit icons that do not fit before the clock and unread count.
 | `job` | `job start <name> [args...]` | Start or restart a job. |
 | `job` | `job stop <name>` | Stop a job. |
 | `session` | `session list` | List display sessions, port shells, and retained port-owned application sessions with their owner. |
-| `session` | `session create shell <port> [--term auto|vt100|ansi|dumb] [--charset utf8|ascii] [--size COLSxROWS]` | Start a shell session on a byte-stream port. |
+| `session` | `session create shell <port> [--term auto\|vt100\|ansi\|dumb] [--charset utf8\|ascii] [--size COLSxROWS]` | Start a shell session on a byte-stream port. |
 | `session` | `session create shell <display-target>` | Attach a shell session to a ready display target such as `lcd0`. |
 | `session` | `session create <app> <display-target> [args...]` | Start a foreground application as the active session on a named display. |
 | `session` | `session focus [display-target]` | Show or assign the display that receives BLE keyboard and local board-control input. |
@@ -803,6 +753,9 @@ Use `--term vt100` or `--term ansi` to force escape-sequence output,
 dimensions without probing. Character encoding is independent of that profile:
 port shells default to `--charset utf8`; use `--charset ascii` when a legacy
 terminal displays Unicode TUI glyphs as unrelated code-page characters.
+
+Closing a port shell releases its worker stack, including the worker reserved
+for a board's default boot console. Reopening a shell allocates a new worker.
 
 `jobs` prints a compact table that fits the built-in display terminal:
 
@@ -858,8 +811,8 @@ job start gestures
 job start httpd /www
 job start meshcore-ble 68:ee:8f:69:5f:35 public 123456
 job start displayd [display-target]   # display0 by default, web0 when headless
-job start cam-webd [qvga|vga] [fps] [auth=none|required]  # QVGA, 5 fps, no auth by default
-job start rtspd [video=<stream>|none] [audio=<stream>|none] [size=qvga|vga] [fps=0..30] [port=<port>]
+job start cam-webd [<width>x<height>|qvga|vga] [fps] [auth=none|required]
+job start rtspd [video=<stream>|none] [audio=<stream>|none] [size=<width>x<height>|qvga|vga] [fps=0..30] [port=<port>]
 job start ntp-sync once
 job start batmon 60
 job start slip uart0 115200
@@ -886,13 +839,13 @@ same job again stops the previous instance and starts it with the new arguments.
 | `ramfs` | `ramfs unmount /path` | Unmount a ramfs mount. |
 | `df` | `df` | Show free space on mounted storage volumes. |
 | `cd` | `cd [path]` | Change current shell directory. |
-| `ls` | `ls [-a] [-h] [path|pattern]` | List files. Hidden files are shown only with `-a`; sizes are human-readable with `-h`. |
-| `cat` | `cat <path|pattern>` | Print a small text file. |
+| `ls` | `ls [-a] [-h] [path\|pattern]` | List files. Hidden files are shown only with `-a`; sizes are human-readable with `-h`. |
+| `cat` | `cat <path\|pattern>` | Print a small text file. |
 | `mkdir` | `mkdir <path> [path...]` | Create directories. |
-| `rm` | `rm [-f|-rf] <path|pattern> [path|pattern...]` | Remove files. `-f` allows directories; `-rf` removes directories recursively. |
-| `mv` | `mv <source|pattern> <dest>` | Rename or move a file or matched set. |
-| `cp` | `cp <source|pattern> <dest>` | Copy a file or matched set. |
-| `zip` | `zip [-0] <archive.zip> <path|pattern> [path|pattern...]` | Create a ZIP archive. `-0` stores without compression. |
+| `rm` | `rm [-f\|-rf] <path\|pattern> [path\|pattern...]` | Remove files. `-f` allows directories; `-rf` removes directories recursively. |
+| `mv` | `mv <source\|pattern> <dest>` | Rename or move a file or matched set. |
+| `cp` | `cp <source\|pattern> <dest>` | Copy a file or matched set. |
+| `zip` | `zip [-0] <archive.zip> <path\|pattern> [path\|pattern...]` | Create a ZIP archive. `-0` stores without compression. |
 | `unzip` | `unzip [-l] <archive.zip> [dest]` | List or extract a ZIP archive. |
 
 Examples:
@@ -911,10 +864,23 @@ unzip -l /books/archive.zip
 
 ## Streams, Logs, Ports, And Transfers
 
+`stream write` accepts up to eight distinct scalar stream/value pairs. Without
+`--rate` it writes each value once. With `--rate 1..100`, it keeps the writers
+open and publishes all values each cycle until Ctrl+C, a disconnect, or an error.
+`--duration` limits publishing to 0.001..86400 seconds and requires `--rate`.
+All values are validated and all streams opened before the first sample is
+written. Writes within a cycle are sequential, not an atomic transaction;
+a runtime failure can leave a partially written cycle. Missed periods are
+skipped rather than replayed. Timing is best effort. On exit, writers close
+without sending an extra value; each receiver applies its own hold or timeout
+policy.
+
 | Command | Usage | Description |
 | --- | --- | --- |
 | `stream` | `stream` or `stream list` | List dynamic typed stream endpoints. |
-| `stream` | `stream status <id>` | Show type, direction, provider, format, owner, and counters for one stream. |
+| `stream` | `stream status <id>` | Show type, direction, provider, format, owner, counters, and any declared scalar command range. |
+| `stream` | `stream echo <source> [--once] [--rate 1..100]` | Print scalar samples with acquisition time, age and native unit, or byte/event source CSV records. IMU records contain one timestamp and all axes. Default display rate is 10 Hz; Ctrl+C stops. |
+| `stream` | `stream write <scalar-sink> <value> [<scalar-sink> <value> ...] [--rate 1..100] [--duration seconds]` | Publish native float32 scalar values once or periodically. Values outside a declared command range are rejected with the stream ID, value, allowed range, and unit. Ctrl+C ends periodic publishing. |
 | `stream` | `stream tcp listen <name> <port>` | Register an exclusive duplex byte stream backed by a raw TCP listener. Requires TCP byte-stream support. |
 | `stream` | `stream tcp connect <name> <host> <port>` | Register an exclusive duplex byte stream for an outbound TCP connection. |
 | `stream` | `stream tcp remove <name>` | Remove an unclaimed TCP listener or outbound stream. |
@@ -922,17 +888,19 @@ unzip -l /books/archive.zip
 | `stream` | `stream ble connect <name> <address> <public\|random\|rpa_public\|rpa_random>` | Register an outbound CoC stream. Connects when claimed. Use the address and type reported by `ble scan`. |
 | `stream` | `stream ble status <name>` | Show connection state, negotiated SDU sizes, queued bytes, and connection interval. |
 | `stream` | `stream ble remove <name>` | Remove an unclaimed BLE stream. |
-| `model` | `model backend`; `model list`; `model info <handle>` | Check engine availability and inspect resident models, interfaces, memory, mode, and references. |
+| `model` | `model backend`; `model list`; `model info <handle>` | Inspect engine, model inventories across backends, or a resident handle. |
 | `model` | `model load <file.espdl> [timeout_ms]`; `model bundle <bundle.json> [timeout_ms]` | Load a resident raw model or a checked model bundle from storage. |
 | `model` | `model mode <handle> <single\|auto\|dual>` | Select execution mode without reloading the model. |
 | `model` | `model unload <handle\|all>` | Explicitly unload models; active operations and retained model references report busy. |
-| `pipeline` | `pipeline list` | List OS-owned native image pipelines. |
-| `pipeline` | `pipeline start qr <source> [limit] [interval_ms]` | Decode QR codes from an image file, video stream ID, or JPEG RTSP URL in a native background job. |
-| `pipeline` | `pipeline start model <source> <model> [limit] [interval_ms]` | Run a resident bundle with one image input. The job retains the model until processing ends or is stopped. |
-| `pipeline` | `pipeline status <id>` | Show job state, frame counts, last error, and the latest frame timings. |
-| `pipeline` | `pipeline result <id>` | Print the latest result as JSON. |
-| `pipeline` | `pipeline stop <id>` | Cancel and join native workers, release the source and model reference, and keep the latest result. |
-| `pipeline` | `pipeline destroy <id>` | Stop and remove the job, configuration, and latest result. |
+| `model` | `model slots <processor> <source>`; `model select <processor> <source> <slot>` | List accelerator inventory or select a slot. |
+| `model` | `model upload <processor> <source> <bundle.json> <slot> [--replace]` | Start the model-upload background job; inspect or cancel with job status/stop model-upload. |
+| `pipeline` | `pipeline list`; `pipeline status <id>` | Inspect native processing jobs, errors and timings. |
+| `pipeline` | `pipeline info <processor> [source] [query]` | Query processor capabilities and models; source defaults to camera0. |
+| `pipeline` | `pipeline start qr <source> [limit] [interval_ms]` | Decode QR codes from files, streams or JPEG RTSP. |
+| `pipeline` | `pipeline start model <source> <model> [limit] [interval_ms]` | Process images with a retained resident bundle. |
+| `pipeline` | `pipeline start himax <camera-id> [limit] [interval_ms]` | Capture and infer with the current HX6538 model through its optional provider. |
+| `pipeline` | `pipeline result <id>` | Read the latest JSON result. |
+| `pipeline` | `pipeline stop <id>`; `pipeline destroy <id>` | Join and release workers; stop keeps the latest result, destroy removes it. |
 | `daq` | `daq help` | Print DAQ usage. |
 | `daq` | `daq status` | Show DAQ job status. |
 | `daq` | `daq streams` | List stream IDs. |
@@ -942,10 +910,10 @@ unzip -l /books/archive.zip
 | `daq` | `daq stop` | Stop the active data-acquisition job. |
 | `log` | `log status` | Show runtime log ring status. |
 | `log` | `log show [count]` | Print recent SolarOS log entries. |
-| `log` | `log follow [error|warn|info|debug]` | Follow logs in the current shell. |
+| `log` | `log follow [error\|warn\|info\|debug]` | Follow logs in the current shell. |
 | `log` | `log clear` | Clear the runtime log ring. |
-| `log` | `log level [error|warn|info|debug]` | Show or change runtime log level. |
-| `log` | `log sink cdc [on|off]` | Enable or disable CDC mirroring of SolarOS logs. |
+| `log` | `log level [error\|warn\|info\|debug]` | Show or change runtime log level. |
+| `log` | `log sink cdc [on\|off]` | Enable or disable CDC mirroring of SolarOS logs. |
 | `port` | `port list` | List byte-stream ports. |
 | `port` | `port status <name>` | Show port capabilities and owner. |
 | `xfer` | `xfer protocols` | List supported and reserved transfer protocols. |
@@ -1099,14 +1067,14 @@ xfer recv <port> <file> --zmodem [--append|--replace]
 | `wifi` | `wifi connect [ssid [password]]` | Connect and save/update a station profile. |
 | `wifi` | `wifi disconnect` | Disconnect station mode. |
 | `wifi` | `wifi known` | List remembered station profiles. |
-| `wifi` | `wifi forget [ssid|all]` | Remove one or all remembered station profiles. |
+| `wifi` | `wifi forget [ssid\|all]` | Remove one or all remembered station profiles. |
 | `wifi repeater` | `wifi repeater` | Show L2 IPv4 repeater state, upstream, downstream, learned clients, and forwarding counters. |
 | `wifi repeater` | `wifi repeater on` | Repeat the current or preferred saved network with the same SSID and password on the same IPv4 subnet. |
 | `wifi repeater` | `wifi repeater off` | Stop L2 forwarding and the downstream AP while retaining the upstream station. |
 | `wifi ap` | `wifi ap [status]` | Show SoftAP status. |
-| `wifi ap` | `wifi ap on [ssid [password [open|wpa|wpa2|wpa/wpa2]]]` | Start and save SoftAP settings. |
+| `wifi ap` | `wifi ap on [ssid [password [open\|wpa\|wpa2\|wpa/wpa2]]]` | Start and save SoftAP settings. |
 | `wifi ap` | `wifi ap off` | Stop SoftAP. |
-| `wifi nat` | `wifi nat [status|on|off]` | Advanced control for IPv4 NAT on the SoftAP interface. Prefer `network router`. |
+| `wifi nat` | `wifi nat [status\|on\|off]` | Advanced control for IPv4 NAT on the SoftAP interface. Prefer `network router`. |
 | `wireguard` | `wireguard [status]` | Show profile, tunnel, selected underlay, route, peer, DNS, and kill-switch state without printing key material. |
 | `wireguard` | `wireguard import <file>` | Validate one standard WireGuard client profile and save it in NVS. The source file is not removed. |
 | `wireguard` | `wireguard forget` | Logically remove the saved profile from NVS. Bring the tunnel down first. |
@@ -1135,8 +1103,8 @@ xfer recv <port> <file> --zmodem [--append|--replace]
 | `mqtt` | `mqtt publish <topic> <payload> [qos] [retain]` | Publish a message with optional QoS 0–2 and retain flag. |
 | `mqtt` | `mqtt subscribe <topic> [qos]` | Subscribe and print received messages until app-exit or `q`. |
 | `ping` | `ping <host> [count]` | Send ICMP echo requests. Without count, ping runs until Esc, Ctrl+C, or app-exit. |
-| `netscan` | `netscan <host|range> [ports]` | Scan TCP ports on one host or a capped IPv4 range. |
-| `ntp` | `ntp [server]` | Sync the wall clock from NTP. |
+| `netscan` | `netscan <host\|range> [ports]` | Scan TCP ports on one host or a capped IPv4 range. |
+| `ntp` | `ntp [server]` | Sync the wall clock from NTP (default server `pool.ntp.org`). Waits up to 40 s, so lwIP can retry one lost packet, then prints `ntp: sync timed out`. |
 
 Wi-Fi is enabled by default when no saved setting exists, including after `nvs
 clear`. `wifi on` and `wifi off` control the radio in the current boot. The
@@ -1244,11 +1212,12 @@ netscan wintermute 22
 | `ota` | `ota upgrade` | Download firmware into the inactive OTA partition and reboot into it. |
 | `ota` | `ota url [url]` | Show or set the OTA base URL. |
 | `ota` | `ota flavor [flavor]` | Show or set target OTA flavor. |
-| `ota` | `ota boot 0|1` | Select an OTA slot and reboot. |
+| `ota` | `ota boot 0\|1` | Select an OTA slot and reboot. |
 | `sshkey` | `sshkey [status]` | Show default SSH key status. |
-| `sshkey` | `sshkey gen [-f] [2048|3072|4096]` | Generate `/.ssh/id_rsa` and `/.ssh/id_rsa.pub`. |
+| `sshkey` | `sshkey gen [-f] [2048\|3072\|4096]` | Generate `/.ssh/id_rsa` and `/.ssh/id_rsa.pub` (default: RSA-3072). |
 | `sshkey` | `sshkey pub` | Print the default public key. |
 | `sshkey` | `sshkey rm` | Remove the default key pair. |
+| `git` | `git help` | Version projects locally, over SSH or anonymous HTTPS. See [Git](git.md). |
 
 OTA resolves the artifact for the compiled board and target flavor from the
 configured release index, verifies the signed index, verifies firmware SHA-256,
@@ -1263,11 +1232,14 @@ available for the compiled board.
 
 | Command | Usage | Description |
 | --- | --- | --- |
-| `battery` | `battery [status]` | Show voltage, state of charge, power source, config, and monitor trend. |
-| `battery` | `battery config` | Show battery capacity and voltage thresholds. |
+| `usb` | `usb [status\|devices\|mode <off\|device\|host>\|serial ...]` | [USB modes](usb.host.md) and GPIO reuse. |
+| `battery` | `battery` | Show voltage, state of charge, power source, charging state, and estimated time left. |
+| `battery` | `battery status` | Show the full report, including config, monitor history, short/long window statistics, and estimated full-charge runtime. |
+| `battery` | `battery config` | Show battery capacity, voltage thresholds, and configured full-charge runtime. |
 | `battery` | `battery capacity [mAh]` | Show or set capacity estimate. |
-| `battery` | `battery min_voltage [V|mV]` | Show or set low-voltage threshold. |
-| `battery` | `battery max_voltage [V|mV]` | Show or set full/external-power shortcut threshold. |
+| `battery` | `battery runtime [hours]` | Show or set expected runtime from full charge to the minimum voltage. Decimal hours are accepted and rounded to minutes; `0` clears the starting estimate. Saved across reboots. |
+| `battery` | `battery min_voltage [V\|mV]` | Show or set low-voltage threshold. |
+| `battery` | `battery max_voltage [V\|mV]` | Show or set the full-charge voltage used for estimated charge, current, and configured-runtime estimates. |
 | `audio` | `audio status` | Show audio state, global speaker level, tone queue, and active synth telemetry. |
 | `audio` | `audio devices` | List registered audio devices and their capture/playback streams. |
 | `audio` | `audio device <id>` | Show one audio device and its native PCM format. |
@@ -1282,10 +1254,12 @@ available for the compiled board.
 | `audio` | `audio loopback [ms] [volume]` | Run microphone-to-speaker loopback. |
 | `audio` | `audio off` | Stop audio output. |
 | `say` | `say [-v <0..100>] [--volume <0..100>] [--pitch <50..200>] [--speed <20..500>] [--drop-if-busy] (--file <path> \| [--] <text...>)` | Queue text for offline speech, or stream a plain UTF-8 text file aloud with live progress. Pitch and speed default to 100. File mode submits bounded chunks through one continuous PicoTTS/audio session, completes paths with Tab, and remains responsive; press Esc or Ctrl+C to stop. Start `speechd` with a PicoTTS voice directory first. |
-| `led` | `led [status|on|off|toggle]` | Inspect or control the built-in status LED when available. |
-| `camera` | `camera [status]` | Initialize the camera on first use and show the detected sensor, JPEG configuration, current owner and frame lease, capture count, and last error. |
-| `camera` | `camera capture <path> [qvga|vga]` | Capture one JPEG into a caller-selected SolarOS path. The default is QVGA; changing size reinitializes the idle camera. Existing files are replaced. |
-| `camera` | `camera off` | Deinitialize an idle camera and release its framebuffer and driver resources. |
+| `led` | `led [status\|on\|off\|toggle]` | Inspect or control the built-in status LED when available. |
+| `camera` | `camera [status]` | Initialize on first use; show sensor, settings, owner, leases, captures, and last error. |
+| `camera` | `camera resolutions` | Probe the camera and list its supported image dimensions. |
+| `camera` | `camera capture <path> [<width>x<height>\|qvga\|vga]` | Save a JPEG, replacing the file. Driver defaults apply; aliases mean 320x240 and 640x480. Unsupported sizes fail. |
+| `camera` | `camera orientation [normal\|mirror\|flip\|180]` | Show or set normal, horizontal mirror, vertical flip, or both. Applies to future frames until reboot or detach; never saved. Support depends on the driver; 90°/270° is unavailable. |
+| `camera` | `camera off` | Stop an idle camera and free its image buffers. The native ESP32 driver also stops the sensor clock. |
 | `expansion` | `expansion` | Open the expansion device manager. Browse attached devices and driver categories, inspect details, attach supported drivers, save runtime attachments to the selected startup script, and detach runtime devices. Bus lifecycle remains in the `io` app. |
 | `expansion` | `expansion status` | Show expansion capabilities, named buses and leases, connector resources, active devices, and resource claims. |
 | `expansion` | `expansion layout [connector]` | Draw the board's physical connector map with live free, releasable, claimed, fixed, power, ground, and NC markers. |
@@ -1323,18 +1297,28 @@ available for the compiled board.
 | `control` | `control bind <name> parameter <path> [pickup=on\|off]` | Bind a control to a typed native-app parameter with optional soft takeover. |
 | `control` | `control bind <name> midi <channel> <cc>` | Bind a control to a MIDI Control Change target. |
 | `control` | `control get\|set <name> [value]` | Read or set a normalized `0..65535` control value. |
-| `control` | `control parameter get\|set <path> [value]` | Read or set an available native parameter in its declared unit. |
+| `control` | `control parameter get\|set <path> [value]` | Read or set an available native parameter in its declared unit. Both commands complete registered parameter paths. |
 | `control` | `control unbind <name>` | Remove all target bindings owned by one named control. |
 | `control` | `control delete <name>` or `control clear` | Remove one control and its bindings, or remove all controls and bindings. |
+| `encoder` | `encoder configure <name> <key> <value>` | Configure PPR, transmission, polarity or filtering for `enc.<name>` velocity feedback. |
+| `motor` | `motor configure <name> polarity\|max_drive\|brake <value>` | Configure the generic motor service and `mot.<name>` drive sink while unclaimed. |
 | `controller` | `controller list` or `controller status <name>` | Inspect feedback controller configuration, state, output, and errors. |
 | `controller` | `controller create <name> pid\|hysteresis` or `controller delete <name>` | Create or remove a named feedback controller. |
 | `controller` | `controller configure <name> <key> <value>` | Set gains, setpoint, output limits, direction, timing, or safe output; see [Feedback controllers](controllers.md). |
-| `controller` | `controller bind <name> <stream>\|manual parameter:<path>\|pwm:<provider>:<output>` | Select timestamped measurement input and an owned parameter or PWM pulse output. |
+| `controller` | `controller bind <name> <stream>\|manual parameter:<path>\|pwm:<provider>:<output>\|stream:<sink>` | Select timestamped measurement input and an owned parameter, PWM pulse, or scalar sink output. |
 | `controller` | `controller feed <name> <measurement>` | Publish a manual-source measurement acquired now. |
 | `controller` | `controller step <name> <measurement> <dt-seconds>` | Calculate output for a stopped controller without writing an actuator. |
 | `controller` | `controller manual <name> <output>` or `controller auto <name>` | Select a fixed output or automatic computation. |
+| `controller` | `controller tune <name> [noise-floor [points [timeout-ms]]]` | Automatically find motion, measure step responses and validate candidate PID gains without applying them. Starts the worker when needed; component-owned controllers reject tuning. Inspect with `status`, abort with `stop`. |
 | `controller` | `controller start\|stop\|reset <name>` | Enable a bound controller, stop and release its output, or reset a stopped instance. |
 | `robot` | `robot joint list` or `robot joint status <joint>` | Inspect joints in the optional external robot library. |
+| `robot` | `robot model load <file.urdf>` or `robot model unload` | Load a validated URDF model without activating hardware, or release it. |
+| `robot` | `robot start` or `robot stop` | Start URDF-declared velocity controllers or release them while retaining the model. Stop before replacing or unloading it. |
+| `robot` | `robot model info\|links\|joints\|metadata` | Inspect the resident model and retained SolarOS extension. |
+| `robot` | `robot model devices` or `robot model frame <device-or-stream>` | List URDF device/frame bindings or resolve a device or registered stream to its frame. |
+| `robot` | `robot model set <joint> <position> [<joint> <position> ...]` | Supply model joint positions as one validated batch. |
+| `robot` | `robot model transform <target> <source>` | Query the transform mapping source-frame coordinates into target. |
+| `robot` | `robot model point\|vector <target> <source> <x> <y> <z>` | Transform a point or direction; see [Robot models and transforms](robot-models.md). |
 | `robot` | `robot joint create <joint> velocity\|servo` | Create an inactive joint without claiming hardware. |
 | `robot` | `robot joint configure <joint> <key> <value>` | Configure PPR, gearbox ratio, polarities, limits, timing or control gains. |
 | `robot` | `robot joint motor <joint> <motor> <encoder>` | Bind named devices to a velocity joint. |
@@ -1342,13 +1326,15 @@ available for the compiled board.
 | `robot` | `robot joint command <joint> <target>` | Refresh an joint target in radians/second or radians. |
 | `robot` | `robot joint enable\|disable\|close <joint>` | Activate, stop and release, or destroy an joint; see [Robot joints](robot.md). |
 | `osc` | `osc bindings` | Inspect named outbound OSC bindings and their live source, value, send, and error state. |
+| `osc` | `osc send <host:port> <address> <value> [value ...] [--rate 1..100] [--duration seconds]` | Send one to eight float32 arguments in one UDP message, once or periodically; Ctrl+C stops. No running OSC job is required. |
 | `osc` | `osc bind <name> stream <stream> <address> [rate=hz] [delta=value] [send=change\|always]` | Publish one scalar stream as OSC float32 values in its native unit. |
 | `osc` | `osc bind <name> stream <event-stream> <address> edge=rising\|falling\|both [rate=hz]` | Publish sampled boolean transitions as OSC int32 `0` or `1`. |
 | `osc` | `osc bind <name> control <control> <address> [rate=hz] [send=change\|always]` | Publish one normalized named control as an OSC float32 value from `0.0..1.0`. |
+| `osc` | `osc bind <name> receive <scalar-sink> <address> [arg=0..7]` | Map one incoming OSC argument to a scalar sink in its native unit. Several bindings may map one message to multiple streams. See [Open Sound Control](osc.md#incoming-stream-bindings). |
 | `osc` | `osc unbind <name>` or `osc clear` | Remove one outbound binding or all outbound bindings. |
 | `radio` | `radio` | Open the packet-radio TUI with live status and editable common config. |
 | `radio` | `radio scan [name]` | Open the graphical `rfscan` app when included in the firmware. |
-| `radio` | `radio status|list` | List packet radios registered by expansion drivers. |
+| `radio` | `radio status\|list` | List packet radios registered by expansion drivers. |
 | `radio` | `radio status <name>` | Show one packet radio, its capabilities, state, and current config. |
 | `radio` | `radio config <name> [field value]` | Show or update common packet-radio configuration. |
 | `radio` | `radio profile list` | List immutable built-in and persistent user radio profiles. |
@@ -1364,8 +1350,8 @@ available for the compiled board.
 | `meshcore` | `meshcore stream list` or `meshcore stream status [port]` | Inspect trusted peer-bound virtual serial ports carried by encrypted MeshCore direct packets. |
 | `meshcore` | `meshcore stream create <port> <trusted-endpoint-id>` | Register a reliable MeshCore virtual serial port for one exact trusted endpoint. Configure both peers. |
 | `meshcore` | `meshcore stream remove <port>` | Remove an unclaimed MeshCore virtual serial port. |
-| `radio` | `radio state <name> [sleep|standby|rx|tx]` | Show or change radio operating state. |
-| `radio` | `radio send <name> <text|byte...>` | Send one packet. |
+| `radio` | `radio state <name> [sleep\|standby\|rx\|tx]` | Show or change radio operating state. |
+| `radio` | `radio send <name> <text\|byte...>` | Send one packet. |
 | `radio` | `radio recv <name> [timeout-ms]` | Receive one packet and print metadata plus payload. |
 | `gnss` | `gnss [list]` | List registered GNSS receivers and their concrete drivers. |
 | `gnss` | `gnss status [name]` | Show power, fix, fix type, and satellite state for one logical receiver. |
@@ -1431,9 +1417,9 @@ available for the compiled board.
 | `uart` | `uart write [bus] <text>` | Write text through the default or selected named UART bus. |
 | `uart` | `uart read [bus] [ms]` | Read bytes from the default or selected named UART bus. |
 | `gpio` | `gpio status` or `gpio list` | List board GPIOs with free, releasable, or fixed pin policy. |
-| `gpio` | `gpio mode <pin> <in|out> [none|up|down]` | Configure a runtime GPIO. |
+| `gpio` | `gpio mode <pin> <in\|out> [none\|up\|down]` | Configure a runtime GPIO. |
 | `gpio` | `gpio read <pin>` | Read a runtime GPIO. |
-| `gpio` | `gpio write <pin> <0|1>` | Write a runtime GPIO configured as output. |
+| `gpio` | `gpio write <pin> <0\|1>` | Write a runtime GPIO configured as output. |
 | `gpio` | `gpio release <pin>` | Reset a direct GPIO and release its resource claim for a bus or another service. |
 | `onewire` | `onewire [status [bus]]` | Show every registered named 1-Wire bus, or one selected bus. |
 | `onewire` | `onewire reset <bus\|pin>` | Reset a named bus or direct runtime GPIO and report presence. |
@@ -1451,8 +1437,8 @@ available for the compiled board.
 | `pwm` | `pwm off <output>` | Stop a general PWM output. |
 | `servo` | `servo list` | Show names, outputs, enabled state, and owners in a compact list. |
 | `servo` | `servo status [name]` | Show calibration, frequency, inversion, and the last accepted command for all servos or one named servo. |
-| `servo` | `servo open <name> <output> <min-us> <max-us> <min-deg> <max-deg> [freq-hz [inverted:0\|1]]` | Reserve an output without pulses; see [Servo outputs](servo.md). |
-| `servo` | `servo set <name> <angle-deg>` / `servo pulse <name> <pulse-us>` | Command a calibrated angle or pulse width. |
+| `servo` | `servo open <name> <output> <min-us> <max-us> <min-rad> <max-rad> [freq-hz [inverted:0\|1]]` | Reserve an output without pulses; see [Servo outputs](servo.md). |
+| `servo` | `servo set <name> <angle-rad>` / `servo pulse <name> <pulse-us>` | Command a calibrated angle in radians or a pulse width in microseconds. |
 | `servo` | `servo disable <name>` / `servo close <name>` | Stop pulses, retaining or releasing the reservation. |
 | `i2c` | `i2c [status [bus]]` | Show every named I2C bus, or one selected bus. |
 | `i2c` | `i2c speed [bus] [hz]` | Show or change a named bus clock; defaults to `i2c0` and accepts 1 through 1000000 Hz. |
@@ -1573,7 +1559,7 @@ cleanup (default 64). `refresh=partial` bypasses periodic cleanup;
 SSD2677 Sticky V2 starts in asynchronous `refresh=pulse` / `waveform=fastwave`
 with its own 535-byte RAM waveform, shared pixel budgets, background settling,
 and adaptive native cleanup. Defaults are `drive-cycles=8`, `pulse-frames=4`,
-`waveform-fr=5`, `pulse-period=100`, `pulse-power=hold`, and
+`waveform-fr=5`, `pulse-period=auto`, `pulse-power=hold`, and
 `cleanup-every=64`. Pulse tuning follows SSD1677, except `waveform-fr` accepts
 1..5 (25, 50, 65, 75, 85 Hz). `pulse-frames` and `drive-cycles` accept 1..32.
 `pulse-scan=sync` waits for settling; `pulse-scan=async` coalesces new targets
@@ -1597,80 +1583,98 @@ manufacturer's Mode 1 OTP waveform with identical monochrome data in both RAM
 planes for full cleanup. Generic profiles retain their differential full-frame
 sequence. Pulse mode uses the controller's 105-byte LUT,
 nominal vendor voltages, and neutral masks for settled pixels. Pulse defaults
-are asynchronous, 100 ms between new images, five drive cycles on Sticky
+are asynchronous, hardware completion pacing, five drive cycles on Sticky
 (three on other profiles), eight scan
 frames, `waveform-fr=8`, retained supplies during settling, and adaptive cleanup
 with baseline 64. `waveform-fr=<1..8>` selects a nibble repeated across its
-five frame-rate bytes. It supports `pulse-period=<67..1000>`,
+five frame-rate bytes. It supports `pulse-period=<auto,67..1000>`,
 `pulse-spi-khz=<100..20000>`, `pulse-power=<cycle,hold>`, and
 `invert=<false,true>`; it retains the native booster ramp. `waveform=otp`
 restores native auto. Pulse memory is allocated in PSRAM on demand.
 
-The Elecrow 5.79-inch dual-SSD1683, Elecrow 4.2-inch green-sticker,
-Waveshare 4.2-inch V2/revision-2.2, SSD1677, and SSD1685 GDEY029T71H profiles provide the
-`refresh=pulse` monochrome mode. `display mode <target> drive-cycles=<1..32>`
-sets the per-pixel budget, `pulse-frames=<1..32>` sets each drive phase's scan
-duration, `waveform-fr=<1..12>` selects a raw frame-rate code (the dual SSD1683
-accepts only 1–5 or 9–12; SSD1677 accepts 1–8), and
-`cleanup-every=<1..128>` sets the cleanup baseline.
-`cleanup-policy=adaptive` tracks actual successful drives per pixel.
-It cleans up when the most-driven pixel reaches `cleanup-every * drive-cycles`
-activations, or after `4 * cleanup-every` changed images, whichever comes first.
-`cleanup-policy=fixed` cleans up every `cleanup-every` changed images.
-Synchronous mode counts completed changed presentations; asynchronous mode
-counts changed targets consumed by the worker. Identical targets do not advance
-the image count. At a limit, the asynchronous worker schedules a native cleanup
-without waiting for another presentation or for all pending pixels to settle.
-Mode output includes the policy, peak/limit drive cycles, and changed-image age.
-These counters estimate accumulated activity and do not measure ghosting.
-These runtime settings apply to pulse mode, with SSD1685's `cleanup-every`
-also controlling its native auto-mode cleanup interval. They are listed by
-`display mode <target>`. `pulse-scan=sync` completes a presentation's pending
-cycles before returning. `pulse-scan=async` runs one cycle per scan in a
-persistent worker and accepts new targets while earlier pixels settle.
-`pulse-period=<10..1000>` requests the minimum new-image interval in milliseconds;
-the dual-SSD1683, Elecrow green-sticker, SSD1677, and SSD1685 profiles instead accept 67–1000 ms.
-Settling drives run as BUSY permits without consuming new-image slots. A new
-target can replace the current target between drives when its image slot is due;
-unchanged pixels keep their remaining budgets. Identical submissions do not
-consume image slots. Synchronous operation still completes all pending drives
-before returning and applies the requested interval between changed targets.
-Mode output separates `frame-count` and `frame-interval-us` for distinct target
-snapshots from `scan-count` and `scan-interval-us` for physical drives. The frame
-count includes native baseline snapshots; submitted/coalesced counts also appear.
-`pulse-power=<cycle,hold>` selects supply cycling or retention during settling,
-`pulse-ramp=<normal,fast>` selects booster duration, and
-`pulse-spi-khz=<100..20000>` overrides the SPI clock only for pulse operation.
-SSD1685 limits pulse SPI to 100–10000 kHz and also exposes `invert=<false,true>`
-for polarity testing; its custom waveform requires panel validation. See the
-[SSD1685 reference](expansion.reference.md#gdey029t71h-e-paper-ssd1685) for defaults.
-Elecrow 5.79-inch defaults are asynchronous, 67 ms new-image interval, retained supplies, fast
-booster ramp, 20000 kHz pulse SPI, 6 drive cycles, 8 scan frames, FR code 4,
-and adaptive cleanup with a baseline of 64. This profile uses the Fastwave
-waveform builder on both controllers, reported as `waveform=fastwave`, with
-no reset kick and one VSS settle frame after the configured drive phase.
-Grayscale images use the existing dithering path.
-CrowPanel 5.79-inch and SolarWriter
-start in pulse mode, with native auto as the fallback if the worker cannot start. Requested
-image cadence is not a guarantee of achieved cadence or optical settling.
-Waveshare 4.2-inch defaults are asynchronous, 100 ms new-image interval,
-supply cycling, normal ramp, the configured SPI clock, 3 drive cycles,
-8 scan frames, FR code 4, and adaptive cleanup with baseline 64. Native and
-pulse timing logs support comparison on that panel.
-The Elecrow green-sticker profile adapts the Fastwave phase builder to its
-UC8276 OLD/NEW RAM and programmable waveform registers, reported as
-`waveform=fastwave-uc8276`. It retains the controller's voltage and PLL setup,
-uploads both full RAM masks, and leaves unbudgeted pixels undriven. Its defaults
-are asynchronous, 67 ms new-image interval, supply cycling, fast ramp,
-20000 kHz pulse SPI, 8 drive cycles,
-8 scan frames, raw PLL code 12, and fixed cleanup every 8 changed images.
-The Elecrow 4.2-inch board starts this revision in pulse mode. For this profile,
-`waveform-fr` selects a raw PLL code; internal scan frequency is separate from
-image update rate.
-The mode requires physical panel calibration; other EPD
-profiles reject it until they have a matching waveform adapter. See the
-[SolarWriter display controls](boards.md#solarwriter) and
-[Waveshare 4G E-paper](boards.md#waveshare-4g-e-paper) for behavior and recovery.
+IT8951 targets expose separate runtime SPI clocks through
+`spi-khz=<100..20000>` for writes and `spi-read-khz=<100..20000>` for reads.
+The E1003 defaults to 20000 kHz writes and 10000 kHz reads. An attachment's `clock`
+selects writes; reads and initial controller setup use at most 10000 kHz.
+For example, `display mode display0 spi-khz=10000` lowers writes while retaining
+the read clock. Overrides take effect on the next transfer and are not saved.
+Mode output reports
+the last actual write/read clocks as `spi` and `read-spi`, and requested
+write/read clocks as `spi-target`. It also reports cumulative refresh `errors`,
+controller `resets` (including startup), and `last-error`. Resetting the display
+after a failed transfer does not clear these counters.
+
+IT8951 accepts `grayscale=2|4|16`; four levels are the default. For example,
+`display mode display0 grayscale=2` switches to compact 1-bit retained images
+with ordered 4x4 dithering. Each native image uses 328536 bytes, saving 985608
+PSRAM bytes compared with the 4-bit image used by the four- and sixteen-level
+modes. Asynchronous graphics uses both a retained and a pending image, saving
+1971216 bytes in total. Monochrome text uses the same compact queue, saving
+1634248 bytes compared with four- or sixteen-level text presentation.
+New graphics sessions use a compact monochrome canvas;
+`view` uses grayscale decoding and avoids INDEX8/RGB565 rendering buffers.
+Close and reopen existing apps after switching to release their old working
+buffers. Native apps can use the optional packed monochrome video API. Mode output
+reports `storage-bpp` and `image-bytes`; transfer `bpp` can already be 1 for a
+binary image in any grayscale mode. Switching modes reallocates storage when
+needed, waits for the current refresh, and redraws the terminal. If allocation
+fails, the previous mode and accepted frame remain usable. This setting is
+runtime-only.
+
+All built-in EPD profiles accept `cleanup-interval=<0..86400>` in seconds.
+Zero preserves the profile's normal cleanup policy. A nonzero value selects
+timed routine cleanup; `cleanup-interval=3600` requests an hourly interval.
+Cleanup runs on the next changed image after the deadline, so an idle image,
+duplicate presentation or padded framebuffer bits cannot cause a timed flash.
+Initialization, encoding changes, errors and explicit full refreshes still
+establish a native baseline immediately. Native partial modes keep their
+profile-specific bypass behavior. Longer intervals need optical validation on
+the actual panel. Mode output reports the interval, completed cleanup count,
+and last cleanup reason. This setting is runtime-only.
+
+Pulse-capable profiles share the following controls through
+`display mode <target> <option>`; use one option per command:
+
+| Option | Meaning |
+| --- | --- |
+| `drive-cycles=1..32` | Base successful activations per changed pixel. |
+| `pulse-frames=1..32` or `changed-drive-frames=1..32` | Waveform scan frames per activation. |
+| `black-redrives=0..31`, `white-redrives=0..31` | Extra activations after a pixel changes to that color; both default to zero. |
+| `waveform-fr=1..12` | Panel-specific frame-rate code; some profiles accept a narrower range. |
+| `cleanup-every=1..128` | Native cleanup baseline. |
+| `cleanup-policy=adaptive` | Clean at peak per-pixel exposure or four times the changed-image baseline. |
+| `cleanup-policy=fixed` | Clean every `cleanup-every` changed images. |
+| `pulse-scan=async` or `sync` | Background settling or complete settling before returning. |
+| `pulse-period=auto` | Default: take the latest target after actual hardware completion. Mode output reports period 0. |
+| `pulse-period=10..1000` | Optional minimum interval between new images. Dual SSD1683, green-sticker, SSD1677, SSD2677 and SSD1685 require at least 67 ms for an explicit limit. |
+| `pulse-power=hold` or `cycle` | Retain supplies during settling or cycle them between drives. |
+| `pulse-ramp=normal` or `fast` | Booster startup duration where supported. |
+| `pulse-spi-khz=100..20000` | Pulse-only SPI override; SSD1685 is limited to 10000 kHz. |
+
+The common policy supports dual-SSD1683 CrowPanel 5.79/SolarWriter, CrowPanel
+4.2 green-sticker UC8276, Waveshare 4.2 V2/revision 2.2, SSD1677, Sticky V2
+SSD2677, and GDEY029T71H SSD1685. Native-only panels reject pulse controls.
+The maximum drive budget is `drive-cycles` plus the target color's extra
+redrives. Identical images never refill it; a reversal replaces the remaining
+direction. Settled pixels return to HOLD. White reinforcement is disabled by
+default and additional redrives need panel-specific optical calibration.
+
+Asynchronous presentation coalesces queued images and accepts a newer target
+between physical drives. Settling runs as BUSY permits, independently of any
+explicit new-image interval. Duplicate images consume no image slots and do
+not age cleanup. Adaptive cleanup counts actual successful drives, with a
+limit of `cleanup-every * (drive-cycles + max(black-redrives, white-redrives))`;
+these counters estimate exposure, not measured ghosting. At a limit the worker
+cleans without waiting for another presentation.
+
+Mode output separates distinct `frame-count`/`frame-interval-us` from physical
+`scan-count`/`scan-interval-us`, and reports `pulse-transfer-us` and
+`pulse-busy-us` separately. Requested cadence does not guarantee optical settling.
+Panel presets, waveform constraints and native fallback behavior are described
+under [SolarWriter](boards.md#solarwriter), [CrowPanel 4.2](boards.md#elecrow-crowpanel-esp32-s3-4-2-inch-e-paper),
+[Waveshare 4G E-paper](boards.md#waveshare-4g-e-paper),
+[Sticky](boards.md#seeed-studio-reterminal-sticky), and
+[SSD1685](expansion.reference.md#gdey029t71h-e-paper-ssd1685).
 
 Packet radio devices are datagram endpoints registered by expansion drivers, not
 byte-stream ports. The common radio layer preserves packet metadata such as RSSI
@@ -1786,7 +1790,7 @@ hello SolarOS
 board
 wifi on
 ping wintermute
-sshkey gen 2048
+sshkey gen 3072
 ota check
 ota upgrade
 watch -n 1 battery

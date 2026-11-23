@@ -14,6 +14,9 @@ typedef void *spi_device_handle_t;
 #define SPI_DEVICE_3WIRE 4
 #define SPI_DEVICE_HALFDUPLEX 8
 #define SPI_DEVICE_NO_DUMMY 16
+#define SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL (1U << 11)
+#define SPI_TRANS_DMA_USE_PSRAM (1U << 12)
+#define SPI_TRANS_DMA_TX_FAIL (1U << 14)
 
 typedef struct {
     int clock_speed_hz, mode, spics_io_num, queue_size;
@@ -34,9 +37,11 @@ typedef struct {
 } spi_transaction_t;
 
 esp_err_t spi_device_polling_transmit(spi_device_handle_t device, spi_transaction_t *transaction);
+esp_err_t spi_device_transmit(spi_device_handle_t device, spi_transaction_t *transaction);
 esp_err_t spi_bus_initialize(spi_host_device_t host, const spi_bus_config_t *config, int dma);
 esp_err_t spi_bus_add_device(spi_host_device_t host, const spi_device_interface_config_t *config, spi_device_handle_t *device);
 esp_err_t spi_bus_remove_device(spi_device_handle_t device);
+esp_err_t spi_device_get_actual_freq(spi_device_handle_t device, int *freq_khz);
 esp_err_t spi_bus_free(spi_host_device_t host);
 
 esp_err_t spi_device_acquire_bus(spi_device_handle_t device, unsigned wait);

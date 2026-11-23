@@ -6,6 +6,7 @@ import tomllib
 import unittest
 
 from tests.test_foreground_presenter import production_functions
+from tests.test_keyboard_layouts import write_keyboard_layouts
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -146,6 +147,7 @@ int main(void) {
                 '#define SOLAR_OS_BOARD_PIN_APP_EXIT 6\n#define SOLAR_OS_BOARD_BUTTONS ' + definitions + '\n')
             path, binary = Path(tmp, "buttons.c"), Path(tmp, "buttons")
             path.write_text(source)
+            write_keyboard_layouts(tmp)
             subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                 "-include", str(ROOT / "tests/host/compat.h"), "-I", tmp,
                 "-I", str(ROOT / "tests/host/gpio_controller_stubs"), "-I", str(ROOT / "tests/host"),
@@ -339,7 +341,7 @@ esp_err_t solar_os_bus_i2c_receive(const char *, uint8_t, uint8_t *, size_t);
 typedef int gpio_num_t;
 #define GPIO_MODE_OUTPUT 1
 static int calls, fail_at = -1;
-static const int expected_pins[] = {45, 46, 47, 10, 42, 38};
+static const int expected_pins[] = {45, 46, 47, 10, 42, 38, 39};
 static esp_err_t record(int operation, int pin) {
     assert(operation == calls % 5);
     assert(pin == expected_pins[calls / 5]);
@@ -348,7 +350,7 @@ static esp_err_t record(int operation, int pin) {
 esp_err_t gpio_hold_dis(int pin) { return record(0, pin); }
 esp_err_t gpio_reset_pin(int pin) { return record(1, pin); }
 esp_err_t gpio_sleep_sel_dis(int pin) { return record(2, pin); }
-esp_err_t gpio_set_level(int pin, int level) { assert(level == (pin == 38 ? 0 : 1)); return record(3, pin); }
+esp_err_t gpio_set_level(int pin, int level) { assert(level == (pin == 38 || pin == 39 ? 0 : 1)); return record(3, pin); }
 esp_err_t gpio_set_direction(int pin, int mode) { assert(mode == GPIO_MODE_OUTPUT); return record(4, pin); }
 '''
         source += function + r'''

@@ -4,6 +4,7 @@
 # GPIO33-37, which carry the LCD SPI signals (GPIO35-37) on the PicoCalc, and a
 # PSRAM mode mismatch aborts the boot. GPIO26-32 belong to the flash.
 CONFIG_IDF_TARGET="esp32s3"
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 # Native model loading catches allocation failures from ESP-DL's C++ containers.
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
@@ -72,6 +73,7 @@ CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y
 # crypto allocations internal while placing large record buffers in PSRAM;
 # boards without PSRAM continue to use internal RAM.
 CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC=y
+CONFIG_MBEDTLS_SSL_PROTO_TLS1_3=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_FREERTOS_HZ=1000
 CONFIG_PM_ENABLE=y

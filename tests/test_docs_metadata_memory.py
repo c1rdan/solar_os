@@ -8,6 +8,97 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DocsMetadataMemoryTest(unittest.TestCase):
+    def test_catalog_validation_reads_each_id_once_and_rejects_duplicates(self):
+        source = (ROOT / 'src/services/solar_os_docs.c').read_text()
+        functions = production_functions(source, ('docs_validate_catalog_page', 'docs_compare_page_ids',
+                                                   'docs_validate_catalog_pages'))
+        code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "esp_err.h"
+#define SOLAR_OS_DOCS_PAGE_COUNT_MAX 1024U
+#define SOLAR_OS_CRYPTO_SHA256_HEX_LEN 65U
+#define SOLAR_OS_MEMORY_EXTERNAL_PREFERRED 1
+typedef struct { char id[64]; bool invalid, invalid_packages; } solar_os_json_value_t;
+typedef struct { const char *id; } solar_os_manual_page_t;
+typedef struct { size_t page_count, index_count, index_bytes; } docs_catalog_t;
+typedef struct { const char *json; size_t len; } docs_pages_t;
+typedef char docs_page_id_t[64];
+typedef struct { docs_page_id_t *ids; size_t capacity; docs_catalog_t *info; } docs_page_ids_t;
+typedef esp_err_t (*solar_os_json_element_fn)(const solar_os_json_value_t *, size_t, bool *, void *);
+static solar_os_json_value_t pages[1024];
+static size_t reads, allocations;
+static bool fail_alloc;
+static void *solar_os_memory_alloc(size_t n, unsigned cls, const char *tag)
+{ assert(cls == 1 && !strcmp(tag, "docs.ids")); if (fail_alloc) return NULL; allocations++; return malloc(n); }
+static void solar_os_memory_free(void *p) { if (p) { assert(allocations); allocations--; free(p); } }
+/* The pages stream past one at a time, as the JSON scanner delivers them. */
+static esp_err_t solar_os_json_array_for_each(const char *array, size_t len,
+    solar_os_json_element_fn visit, void *user, size_t *count)
+{
+    const solar_os_json_value_t *p = (const solar_os_json_value_t *)(const void *)array;
+    bool stop = false;
+    for (*count = 0; *count < len && !stop; (*count)++) {
+        reads++;
+        const esp_err_t err = visit(p + *count, *count, &stop, user);
+        if (err != ESP_OK) return err;
+    }
+    return ESP_OK;
+}
+static esp_err_t docs_page_metadata(const solar_os_json_value_t *p, char *id, size_t id_len,
+    char *relative, size_t relative_len, char *sha, uint32_t *size)
+{ (void)relative; (void)relative_len; (void)sha; (void)size;
+  if (p->invalid) return ESP_ERR_INVALID_RESPONSE; snprintf(id, id_len, "%s", p->id); return ESP_OK; }
+static esp_err_t docs_catalog_page_applies(const solar_os_json_value_t *p, bool *applies)
+{ *applies = true; return p->invalid_packages ? ESP_ERR_INVALID_RESPONSE : ESP_OK; }
+static esp_err_t docs_manual_page_bytes(const solar_os_json_value_t *p, size_t *bytes)
+{ (void)p; *bytes = 10U; return ESP_OK; }
+static size_t solar_os_manual_embedded_count(void) { return 1; }
+static const solar_os_manual_page_t *solar_os_manual_embedded_get(size_t i)
+{ assert(i == 0); static const solar_os_manual_page_t p = {"topic-0000"}; return &p; }
+''' + functions + r'''
+static docs_catalog_t info;
+static esp_err_t validate(size_t count, bool require)
+{
+    info = (docs_catalog_t){.page_count = count};
+    const docs_pages_t list = {.json = (const char *)(const void *)pages, .len = count};
+    reads = 0;
+    return docs_validate_catalog_pages(&list, &info, require);
+}
+int main(void) {
+    for (unsigned i = 0; i < 1024; i++) snprintf(pages[i].id, sizeof(pages[i].id), "topic-%04u", 1023-i);
+    assert(validate(1024, true) == ESP_OK);
+    assert(reads == 1024 && allocations == 0);
+    assert(info.index_count == 1024 && info.index_bytes == 10240);
+    strcpy(pages[1023].id, pages[0].id);
+    assert(validate(1024, false) == ESP_ERR_INVALID_RESPONSE && allocations == 0);
+    strcpy(pages[1023].id, "different");
+    assert(validate(1024, true) == ESP_ERR_INVALID_RESPONSE && allocations == 0);
+    assert(validate(1024, false) == ESP_OK);
+    pages[511].invalid = true;
+    assert(validate(1024, false) == ESP_ERR_INVALID_RESPONSE && allocations == 0);
+    pages[511].invalid = false; pages[511].invalid_packages = true;
+    assert(validate(1024, false) == ESP_ERR_INVALID_RESPONSE && allocations == 0);
+    pages[511].invalid_packages = false;
+    fail_alloc = true;
+    assert(validate(1024, false) == ESP_ERR_NO_MEM && allocations == 0);
+    fail_alloc = false;
+    assert(validate(0, false) == ESP_ERR_INVALID_RESPONSE);
+    assert(validate(1025, false) == ESP_ERR_INVALID_RESPONSE);
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp, 'catalog')
+            subprocess.run(['cc', '-x', 'c', '-std=c11', '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+                            '-I', str(ROOT / 'tests/host'), '-o', str(binary), '-'],
+                           input=code, text=True, check=True)
+            subprocess.run([str(binary)], check=True)
+
     def test_pack_rebases_metadata_and_keeps_embedded_text_and_failure_state(self):
         source = (ROOT / 'src/services/solar_os_docs.c').read_text()
         function = production_functions(source, ('docs_manual_index_free', 'docs_manual_index_pack'))

@@ -219,11 +219,17 @@ rtsp --stats rtsp://192.168.1.192:8554/youtube
 rtsp --audio-only --stats rtsp://192.168.1.192:8554/youtube
 rtsp-auth set 192.168.1.50 admin camera-password
 rtsp rtsp://192.168.1.50/media
+rtsp cameras.m3u
+rtsp
 ```
 
 The `rtsp://` prefix is optional. The RTSP control connection uses TCP port 554
 unless a port is supplied; RTP media uses negotiated UDP ports. Addresses without
 a path are accepted; include the publisher's path when required.
+
+RTSP playback keeps Wi-Fi awake while connecting, playing, and reconnecting to
+avoid delayed or dropped live media. Normal power saving resumes after playback
+stops, unless another active service still needs low-latency Wi-Fi.
 
 Inline credentials use `user:password@host`; percent-encode spaces and reserved
 characters in the username or password.
@@ -237,14 +243,25 @@ Audio-only sessions use the common audio GUI oscilloscope, fed by playback PCM,
 filling the available area between the header and player controls.
 Port shells select audio only and print playback status. `--audio-only` skips
 video negotiation and video buffers even when the publisher offers both tracks.
-Audio uses the selected default output and global volume; Up/Down adjust volume
+Audio uses the selected default output and RTSP's saved volume; Up/Down adjust volume
 (`+`/`-` remain aliases). The graphical player uses the common header, volume
-bar, and Stop/Play button. Enter, Space, or a tap on the button stops playback
+bar, and Previous, Stop/Play, and Next buttons. Enter or a tap on Stop stops playback
 without closing the app; Play reconnects to the same URL. Stopping releases the
 network, decoder, audio output, and media buffers once their workers finish.
-RTSP URLs are single sources, so there are no Previous/Next buttons.
-`F` toggles fullscreen, hiding the header and controls while retaining aspect-fit
-video or expanding the audio-only oscilloscope to the whole screen. `D` toggles
+`Left`/`Right` selects the previous/next saved stream. `Tab` switches to the
+shared playlist view; `Up`/`Down` selects an entry and `Enter` plays it.
+`A` opens the same name/URL entry dialog as WebRadio. `E` edits the selected
+entry, and `Delete` removes it. Changes save to M3U immediately.
+`Space` pauses/resumes locally: video freezes and incoming audio is discarded.
+Resume returns to live media; it does not replay the paused interval.
+Opening a URL adds it to `.rtsp/playlist.m3u`; opening an M3U replaces that list.
+Bare `rtsp` opens the playlist view, including an empty list, without connecting.
+Direct URLs also work without mounted
+storage, with a list kept only for that session. M3U files are plain text;
+use `rtsp-auth` accounts to keep passwords out of saved URLs.
+`F` toggles fullscreen, using the entire display panel and hiding the header and
+controls while retaining aspect-fit video or expanding the audio-only oscilloscope
+to the whole panel. `D` toggles
 the separate frame diagnostic overlay: received, displayed, network/app drops,
 and displayed frames per second. `Q`, Escape, or the normal application-exit key
 closes playback.
@@ -295,8 +312,6 @@ agent config reasoning medium
 agent config tools confirm
 agent config max-tools 16
 agent
-job start speechd /voices/en-US
-agent --tts
 agent list
 agent resume SLOT
 agent ask How much memory is free on this device?
@@ -310,17 +325,47 @@ after leaving the app or rebooting. `agent delete SLOT` removes one conversation
 without changing provider credentials. Responses uses its saved provider
 continuation ID; Chat Completions uses bounded local history. Slots are `1` to
 `3` on internal flash or `1` to `8` on SD; the oldest is reused when full.
-`agent ask`
-performs one unsaved request but likewise waits for `Esc` or the app-exit key
-after completion, so display-shell output is not immediately replaced by the
-shell screen.
+`agent ask` performs one unsaved foreground request. `Esc` or the app-exit key
+cancels an active request.
+
+### Image input
+
+Use a vision-capable model and add `--image SOURCE` before the question. Sources
+include stored images, `stream:ID` camera frames, `rtsp://` JPEG frames, and the
+image retained with a completed pipeline result:
+
+```text
+agent ask --image /pictures/sample.jpg Describe this picture.
+agent ask --image stream:camera0 What do you see?
+agent ask --image pipeline:1 Describe this processed frame.
+```
+
+Inside a chat, use `/image SOURCE QUESTION`. Up to two images may total 512 KiB.
+See [Agent image questions](agent.md#ask-about-an-image) for formats and ownership.
+
+### Speech output
 
 `agent --tts`, `agent --tts new`, `agent --tts resume SLOT`, and
 `agent --tts ask PROMPT` keep the written answer and also queue the successful
-final model response through the running local PicoTTS `speechd`. Start
-`speechd` with a voice directory first. Status and retry messages, tool calls,
+final model response through local PicoTTS. Select the `speech` package and copy
+a voice folder containing `ta.bin` and `sg.bin` to SD or flash, then start
+`speechd` with that directory:
+
+```text
+job start speechd /voices/en-US
+say "Solar O S is ready"
+agent --tts
+agent --tts ask --image stream:camera0 Describe the scene.
+```
+
+Speech uses the global `audio level` and can wait behind another audio user.
+Status and retry messages, tool calls,
 tool results, confirmations, and intermediate text before a tool call are not
-spoken.
+spoken. The provider supplies text; synthesis and voice selection happen on
+the device. See [Agent speech output](agent.md#speech-output) for voice setup,
+language selection, and troubleshooting.
+
+### Provider settings and tools
 
 Use `agent config key clear` for an endpoint that does not require bearer
 authentication. `agent status` shows configuration, request counters, HTTP
@@ -505,17 +550,72 @@ Funcgen is active:
 - `funcgen.output`: runtime output index; 0 follows the default output.
 - `funcgen.enabled`: 0 off or 1 on.
 
+## Media player settings
+
+`player`, `webradio`, `vplay`, and `rtsp` each remember their own playback
+volume, independently of the global SolarOS volume. The first-use volume is
+50 percent; zero mutes that player. The saved level is applied when playback
+opens an output and is kept across track changes, app restarts, and reboots.
+Adjusting a stopped player's volume changes its setting without changing
+another app's active output.
+
+Player also remembers its last Cassette, Scope, or Spectrum visualization.
+WebRadio remembers Scope or Spectrum. `V` changes the visualization in each
+player's graphical Play tab.
+
+Volume and visualization changes stay in memory while the app is open.
+Exiting the app with Escape saves changed settings once to
+`.settings/media-<app>.bin` on the current mounted storage volume.
+Without writable mounted storage, choices remain in memory for the current
+session.
+
+## Media playlists
+
+`player`, `webradio`, `vplay`, and `rtsp` share the M3U playlist format.
+Open a local `.m3u` or UTF-8 `.m3u8` file as the player's argument. Import
+replaces that player's saved list and starts its first entry; the source M3U
+stays unchanged. An empty M3U clears the list. Unsupported entries, oversized
+lists, malformed files, or failed saves leave the previous list intact.
+
+| Player | Entries | Saved list | Capacity |
+| --- | --- | --- | --- |
+| `player` | Local WAV/MP3 files | `.player/playlist.m3u` | 32 |
+| `webradio` | HTTP(S) MP3 URLs | `.solar/webradio/playlist.m3u` | 16 |
+| `vplay` | Local MPEG-1 `.mpg`/`.mpeg` files | `.vplay/playlist.m3u` | 32 |
+| `rtsp` | `rtsp://` URLs | `.rtsp/playlist.m3u` | 32 |
+
+Paths are relative to the current storage root in the table. Within an M3U,
+relative file paths resolve against the M3U's folder. Absolute paths and local
+`file:///` URLs are also accepted. Blank lines and comments are ignored.
+`#EXTINF:seconds,title` supplies a display title and duration; metadata does not
+change decoder timing or seeking. Saved lists use extended M3U with UTF-8 text.
+Titles are limited to 95 bytes (31 for WebRadio), local paths to 159 bytes,
+WebRadio URLs to 159 bytes, and RTSP URLs to 319 bytes. Files are limited to
+64 KiB and lines to 1023 bytes. HLS manifests and nested playlists are unsupported.
+
+```text
+#EXTM3U
+#EXTINF:180,First track
+music/first.mp3
+#EXTINF:-1,Second track
+music/second.wav
+```
+
+Existing Player and WebRadio binary lists migrate on first use. The binary
+files remain as backups; M3U takes precedence thereafter. Legacy WebRadio NVS
+data is removed only after the M3U has been saved successfully.
+
 ## player
 
 Interactive WAV/MP3 player and the user-facing counterpart to `aplay`. `player`
-keeps a persistent playlist under `.player` on the current storage root. Opening
+keeps a persistent M3U playlist under `.player` on the current storage root. Opening
 an audio file from Files adds it to that playlist, selects it, and starts
 playback. Missing files remain listed so removable media can be reattached.
 
 Usage:
 
 ```text
-player [--tui] [file.wav|file.mp3]
+player [--tui] [file.wav|file.mp3|playlist.m3u]
 ```
 
 Player selects its graphical interface on a graphical shell and its text
@@ -733,8 +833,10 @@ Controls:
 
 Serial terminal for a bidirectional byte-stream port. Display-keyboard or
 port-shell input is forwarded to the selected port, and received bytes are
-drawn in the active terminal. The port may be a UART or a virtual port such as
-a peer-bound SolarOS Link stream.
+drawn in the active terminal. The port may be a UART, a hosted USB serial adapter such as `usb-serial0`,
+or a virtual port such as a peer-bound SolarOS Link stream. Configure USB
+serial settings with `usb serial PORT OPTIONS` before opening `com`; see
+[USB host](usb.host.md).
 
 Usage:
 
@@ -767,6 +869,7 @@ Examples:
 com --hex gps
 com --autobaud --hex uart0
 com vser0
+com usb-serial0
 ```
 
 Controls:
@@ -795,11 +898,11 @@ graphical display shell, WebRadio opens a two-tab media-player GUI. The GUI uses
 small display targets. On UART,
 USB CDC, Telnet, SSH, and other text shells, it opens a station-list TUI.
 
-The catalog is stored as `.solar/webradio/catalog.bin` on the current storage
+The catalog is stored as `.solar/webradio/playlist.m3u` on the current storage
 root and starts with the Nightride, Chillsynth, Datawave, Spacesynth, Darksynth,
 Horrorsynth, EBSM, and Rekt streams. Catalog changes survive reboot. On first
-use after an upgrade, WebRadio moves an older NVS catalog to this file and
-removes the large NVS blob. `reset` restores the initial list.
+use after an upgrade, WebRadio imports the older binary or NVS catalog.
+`reset` restores the initial list.
 
 Usage:
 
@@ -807,6 +910,7 @@ Usage:
 webradio
 webradio --tui
 webradio https://stream.nightride.fm/nightride.mp3
+webradio podcasts.m3u
 webradio list
 webradio add MyStation https://example.net/live.mp3
 webradio remove MyStation
@@ -819,7 +923,13 @@ as a harmless interface override.
 
 URLs are literal HTTP or HTTPS MP3 stream URLs. WebRadio does not translate
 station names or website addresses and does not discover streams from HTML
-pages. Playlists, HLS, and AAC are unsupported.
+pages. Local M3U/M3U8 playlists are supported; HLS and AAC are unsupported.
+Successful finite HTTP responses advance to the next entry and stop at the
+end of the list. Opening an M3U also enables advancement on successful EOF
+when a server does not supply a content length. In the saved catalog,
+`#EXTINF:0,title` marks a finite entry with unknown duration; `-1` keeps live
+reconnect behavior for streams without a content length. HTTP failures still
+use the existing reconnect policy.
 
 Controls:
 
@@ -829,7 +939,7 @@ Controls:
   analyzer shows the frequencies in the playing audio.
 - On the Player tab, `Left` and `Right` play the previous or next catalog
   channel. The catalog wraps as a ring. `Enter` stops playback or reconnects
-  the channel; Space pauses/resumes, and `Up`/`Down` changes global volume in
+  the channel; Space pauses/resumes, and `Up`/`Down` changes WebRadio's saved volume in
   five-percent steps.
 - The bottom controls show the channel name, playback state and elapsed output
   time above the volume bar, followed by Previous, Stop/Play, and Next buttons.
@@ -891,6 +1001,12 @@ Text editor for files on mounted storage. It supports cursor navigation,
 selection, clipboard operations, text-size changes, and syntax highlighting for
 known source files. The editor supports files up to 256 KiB on boards with
 PSRAM and 32 KiB on boards without PSRAM. Use `hexedit` for binary files.
+
+Highlighting follows the filename: C source and headers (`.c`, `.h`), Python
+(`.py`, `.pyw`), and Lua (`.lua`). C highlighting covers keywords and standard
+types, preprocessor directives, comments, string and character literals, and
+numbers. Multiline comments and continued literals retain their highlighting
+when scrolling. It works in the display editor and port terminals.
 
 Usage:
 
@@ -1307,6 +1423,10 @@ pin, named-bus, and resource-claim views. It uses the same ownership and
 validation services as the `gpio`, `i2c`, `spi`, `uart`, `midi`, `onewire`, and
 `expansion` commands.
 
+The Pins view lists all declared board pins, including fixed onboard devices,
+with their assignments, owners, and pin policies. Fixed pins remain protected
+from direct GPIO, PWM, and runtime bus assignment.
+
 Usage:
 
 ```text
@@ -1635,6 +1755,46 @@ Controls:
 - `Left`/`Right` collapse/expand a category.
 - `q`, `Esc`, or app-exit key exits.
 
+## photo
+
+Live viewfinder and still capture from a registered JPEG video source or an
+RTSP JPEG camera. The default source is `camera0`; this application requires
+a graphical display and PSRAM. Select the `photo` package group. Local camera
+providers are supplied by the `camera` group; RTSP reception is included on
+Wi-Fi boards and uses the same UDP JPEG transport as the `rtsp` application.
+JPEG frames are limited to 2 megapixels and 512 KiB.
+
+```text
+photo
+photo --fullscreen
+photo camera0 --size 640x480
+photo rtsp://192.168.1.238/media --dir /photos
+photo --key SPACE --dir /photos
+```
+
+Press **Enter** or tap the shutter button to save the currently displayed frame.
+`--key KEY` selects a different logical key, such as `SPACE` or `F1`; Escape,
+the app-exit key, and `f`/`F` are reserved. Press `f` to toggle between the canvas
+viewfinder and the full panel, including circular panels. `--fullscreen` starts
+in full-panel mode. Escape or the app-exit key closes the application.
+The status line reports successful saves and storage errors.
+
+Files are named `photo-000001.jpg`, `photo-000002.jpg`, and so on in the launch
+directory, or in the existing directory selected by `--dir`. Existing files
+are skipped and never replaced. The saved JPEG retains the source resolution
+and encoded bytes; preview resizing does not reduce the captured image.
+
+`--size WIDTHxHEIGHT` requests a native mode from a registered stream and also
+accepts `qvga`/`vga` aliases. Use `camera resolutions` for built-in camera modes.
+RTSP URLs use the remote camera's resolution and do not accept `--size`.
+Autocomplete suggests video sources, options, capture keys, output directories,
+and the selected stream's advertised default dimensions without opening it.
+
+Preview acquisition, decoding, and saving run on a worker, with a preview rate
+limit of 10 frames per second. Actual speed depends on the source and display.
+Suspending releases the source; resuming opens it again. Exclusive sources
+cannot be shared with another camera owner such as `rtspd` or `cam-webd`.
+
 ## plot
 
 Graphical plotter for DAQ CSV files and live scalar streams. It is compatible
@@ -1785,11 +1945,10 @@ writer [file.md]
 
 Without a path, Writer opens an untitled document and asks for a path on the
 first save. Existing files larger than 256 KiB are rejected without changing
-them. Saves use a synced same-directory staging file, backup rename, verified
-replacement, and rollback. Cursor, scroll anchor, and zoom metadata plus idle
-recovery snapshots live centrally under `/.writer` or the active persistent
-storage root. Writer offers a differing recovery snapshot when the document is
-opened again. Recovery uses `R` to recover, `D` to discard the snapshot, or `C`
+them. If saving fails, Writer preserves the previous saved file. Cursor
+position, zoom, and recovery snapshots are stored under `.writer` on the active
+persistent storage root. Writer offers a differing recovery snapshot when the
+document is opened again. Recovery uses `R` to recover, `D` to discard the snapshot, or `C`
 to cancel; the unsaved-changes dialog similarly uses `S`, `D`, and `C`.
 
 Controls:
@@ -2074,9 +2233,9 @@ view [-fit|-actual] <image>
 Controls:
 
 - Arrows pan.
-- `f` toggles fit/actual mode. Fit mode scales the image up or down to the screen.
+- `f` toggles fullscreen, using the entire display panel instead of the canvas.
 - `0` selects actual size.
-- `1` selects fit-to-screen.
+- `1` selects fit-to-screen, scaling the image up or down to the current viewport.
 - `Esc` or app-exit key exits.
 
 ## vplay
@@ -2093,7 +2252,7 @@ Full screen uses the entire display for video. The minimum target size is
 Usage:
 
 ```text
-vplay [-fit|-actual] <file.mpg>
+vplay [-fit|-actual] [file.mpg|playlist.m3u]
 ```
 
 Supports MPEG-1 program streams (`.mpg` and `.mpeg`) containing
@@ -2106,21 +2265,29 @@ source complexity, display transfer speed, and output size.
 Controls:
 
 - `Space` pauses/resumes.
-- `Up`/`Down` changes global volume.
+- `Up`/`Down` changes VPlay's saved volume.
 - `Enter` stops playback or restarts the selected file.
 - `<`/`>` seeks backward/forward ten seconds, preserving pause state.
-- `Left`/`Right` selects the previous/next MPEG file in the same folder, in
-  filename order. At either end, the selection stays unchanged.
+- `Left`/`Right` selects the previous/next playlist entry. At either end,
+  the selection stays unchanged.
+- `Tab` switches between Play and the shared Playlist view. `Up`/`Down`
+  selects an entry; `Enter` plays it.
+- In the Playlist view, `A` opens Player's file browser to add a video or import
+  an M3U. `Delete` removes the selected entry. `Esc` cancels the browser.
+  Changes save to M3U immediately.
 - The shared Previous, Rewind, Stop/Play, Forward, and Next buttons provide
   the same actions when clicked or tapped.
-- `f` toggles full screen, hiding the header, volume strip, and transport buttons.
+- `f` toggles full screen, using the entire display panel and hiding the header,
+  volume strip, and transport buttons.
 - `0` selects actual size and `1` selects fit.
   Actual-size video larger than the viewport is cropped centrally.
 - `d` toggles frame/timing log diagnostics.
 - `Esc` or app-exit key exits.
 
-Playback pauses while its session is suspended and returns to the shell at the
-end of the file. Audio uses the selected SolarOS output and acts as the playback
+Opening a video adds it to `.vplay/playlist.m3u`. Bare `vplay` opens the playlist
+view, including an empty list, without starting playback.
+Playback advances at EOF and stops after the final entry.
+Playback pauses while its session is suspended. Audio uses the selected SolarOS output and acts as the playback
 clock when present; a file with audio requires an available playback output.
 Video dimensions and frame rate must remain constant, and the initial audio/video
 timestamp difference must be no more than ten seconds.
@@ -2182,15 +2349,16 @@ Controls:
 
 ## web
 
-Simple graphical web browser for lightweight HTML pages. It shares document and
-image rendering infrastructure with `reader` where possible. Embedded and
+Graphical browser for lightweight HTML pages, with an editable address bar,
+Back, Forward, Reload/Stop, Go, pointer navigation, and text zoom. Embedded and
 direct PNG, JPEG, GIF, and WebP images retain color on indexed-color displays;
-one-bit displays keep the grayscale decode and dither path. Direct MJPEG URLs
-are shown as live video using the same JPEG renderer.
+one-bit displays use grayscale decoding and dithering. Direct MJPEG URLs are
+shown as live video.
 
 Usage:
 
 ```text
+web
 web http://host/
 web https://host/path
 web http://camera-host/camera.mjpeg
@@ -2199,32 +2367,49 @@ web http://camera-host/camera.mjpeg
 MJPEG playback uses a bounded 512 KiB assembly buffer and a single pending
 decoded frame. If decoding or display presentation falls behind the source,
 `web` drops the stale pending frame and keeps the newest one instead of growing
-latency or memory use. Reload, Back, Forward, and app exit cancel the active
+latency or memory use. Stop, Back, Forward, Go, and app exit cancel the active
 HTTP stream. The stream inherits the security properties of its URL; plain
 HTTP provides no encryption or peer authentication.
 
 Controls:
 
-- The top toolbar provides Back, Reload, and Forward. Pointer or touch presses
-  activate the toolbar and open links or form controls directly.
-- `Left` or `b` goes back, `Right` or `f` goes forward, and `r` reloads while
-  retaining the current reading position.
+- The top navigation bar provides Back, Forward, Reload/Stop, an editable
+  address field, and Go. Reload becomes Stop while a page loads or an MJPEG
+  stream runs. Stop cancels the request and retains the last displayed video frame.
+- Launch `web` without a URL to enter an address. Click the address field or
+  press `Ctrl+L` to select its contents. Type a URL, then press Enter or Go to
+  open it. Addresses without a scheme use `http://`. Arrow keys, Home, End,
+  Backspace, and Delete edit the address; `Ctrl+A` selects it, `Ctrl+U` clears
+  it, and Esc restores the current URL.
+- Touch, mouse, and trackball pointers activate navigation buttons, links, and
+  form controls. Relative pointers show a cursor; touch uses the contact position.
+  A source assigned to [pointer-arrows](jobs.reference.md#pointer-arrows) sends
+  arrow keys instead; run `job stop pointer-arrows` to use it as a pointer.
+- `Left` or `b` goes back and `Right` or `f` goes forward. `r` reloads while
+  retaining the current reading position, or stops an active request.
 - `Up`/`Down` or `k`/`j` scroll one rendered line. Page Up/Page Down, Home,
   and End provide larger movement.
 - `n` or Tab selects the next link or form control; `p` selects the previous
   one. Selection stops at each end, and Enter activates it.
 - Links and plain page text use the same font size. Links remain underlined,
   headings remain bold, and `+`/`-` or `Ctrl++`/`Ctrl+-` reflow page text
-  through the same five zoom levels as Reader.
+  through the same five zoom levels as Reader. `Ctrl++`/`Ctrl+-` also works while
+  editing an address or form field. Zoom changes text size; direct images and
+  MJPEG video are not zoomed.
 - `Ctrl+F` opens Find and `F3` jumps to the next case-insensitive match in
   rendered page text, wrapping at the end.
-- `Esc` or app-exit key exits.
+- `Esc` cancels address, search, or form editing first; otherwise it exits.
+  The app-exit key exits from any view.
+
+Page navigation shortcuts apply when the page has keyboard focus. While editing
+the address, Tab returns focus to the page without opening the edited URL.
 
 ## zoo
 
 Browse the hosted model zoo and install complete model bundles on mounted SD
 or flash storage. The text interface works on the display and VT100 port shells.
-It requires the Zoo package, ESP32-S3, PSRAM, and networking.
+It requires the Zoo package, ESP32-S3, and PSRAM. Networking is needed to refresh
+the catalog or download a bundle; browsing and removing installed bundles work offline.
 
 ```text
 zoo
@@ -2232,21 +2417,39 @@ zoo refresh
 zoo source [HTTPS-CATALOG-URL|reset]
 zoo storage [sd|flash]
 zoo install ID VERSION
+zoo installed
+zoo remove ID VERSION
 ```
 
-The default source is `https://solar-os.eu/zoo/catalog.json`. The first launch
-fetches it; later launches use the cached catalog. `r` refreshes the cache.
-Up/Down and Page Up/Page Down select entries, Enter opens details, Alt+S searches,
-and `d` downloads the selected version. Arrows and page keys scroll long details.
-`*` marks an installed bundle and `!`
-marks an incompatible entry. `c` or Esc cancels a running operation. `q` or Esc returns
-from details or exits the browser; the app-exit key exits from either view.
+The default source is `https://solar-os.eu/zoo/catalog-v2.json`. Zoo opens immediately
+using its cached catalog and installed inventory. Press `r` or run `zoo refresh`
+to fetch the catalog, including on first use. Models are grouped into folders by
+execution target and backend, such as `esp32s3 (espdl)` and `hx6538 (himax)`.
+Explicit source preferences are preserved; use `zoo source reset` to switch an
+older saved source to the current default. The legacy `catalog.json` endpoint
+continues to serve ESP-DL entries for older clients.
+The browser uses the same expandable tree and dialogs as `pkg`. Up/Down and
+Page Up/Page Down select entries; Enter toggles a target folder or opens model
+details. Right expands a folder or opens details. Left selects the parent folder,
+collapses a selected folder, or returns from details. `/` or Alt+S searches, and
+`t` toggles installed models only. `i` installs the selected version and `u` removes
+its stored bundle; both ask for confirmation. The older `d` download and `x` remove
+shortcuts also work. `zoo remove ID VERSION` removes a bundle directly. Unload
+resident ESP-DL models before removing their bundles. Arrows and page keys scroll
+long details. `[I]` marks an installed bundle and `[!]` marks an incompatible entry.
+Esc or `c` cancels a running operation. Enter or Esc closes the result dialog.
+`q` or Esc returns from details to the tree, then exits; the app-exit key exits
+from any view. Alt+Enter toggles fullscreen, which uses all available content rows.
 
 Source and storage preferences persist. Without an explicit storage preference,
 Zoo uses mounted SD, then flash. Files are stored under `dl/zoo/` on that volume;
 each installed bundle is in `models/ID/VERSION/`. Downloads are streamed to storage,
 checked against archive, manifest, model, and asset hashes, and installed through
 a staged directory swap. Interrupted downloads preserve the previous installation.
+The installed inventory is rebuilt from local manifests and installation receipts.
+It remains available if the cached catalog is missing, a repository removes a model,
+or the configured source changes. `zoo installed` lists installed versions and paths
+without contacting the repository.
 
 The browser shows task, modality, result adapter, license, validation status, and
 reported free-memory requirements. Runtime compatibility is not a
@@ -2254,7 +2457,10 @@ device inference test, and unreported memory remains unknown. The device accepts
 catalogs up to 512 KiB and 256 entries; larger catalogs fail without replacing the
 cache. Installation also needs enough storage for the ZIP and extracted files.
 
-Installation does not load a model. Use the displayed `bundle.json` path with
+Installation downloads a bundle to storage. Himax downloads do not program or
+select an accelerator model; use [Himax model management](himax-models.md) for that separate step.
+Removing a bundle never erases a model from accelerator flash.
+For ESP-DL, use the displayed `bundle.json` path with
 `model bundle PATH` or the native, Python, or Lua inference APIs. Loaded models
 remain resident until explicitly unloaded or the device reboots. See
 [Model bundles](model-bundles.md) for inputs, results, and execution, and

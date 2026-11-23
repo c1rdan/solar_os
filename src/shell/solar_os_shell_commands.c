@@ -42,6 +42,7 @@
 #include "solar_os_display.h"
 #include "solar_os_backlight.h"
 #include "solar_os_display_layout.h"
+#include "solar_os_font_packs.h"
 #include "solar_os_fonts.h"
 #include "solar_os_identity.h"
 #include "solar_os_input.h"
@@ -272,6 +273,7 @@ static void display_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "  display [list]");
     solar_os_shell_io_writeln(term, "  display orientation <target> [0|90|180|270]");
     solar_os_shell_io_writeln(term, "  display scale <target> [1..4]");
+    solar_os_shell_io_writeln(term, "  display canvas <target> [default|full|x y width height]");
     solar_os_shell_io_writeln(term, "  display layouts");
     solar_os_shell_io_writeln(term, "  display test <target>");
     solar_os_shell_io_writeln(term, "  display mode <target> [mode]");
@@ -781,6 +783,69 @@ static void display_cmd_relax(solar_os_context_t *ctx, solar_os_shell_io_t *term
                              result.cancelled ? "stopped" : "done", (unsigned)result.cycles);
 }
 
+typedef struct {
+    const char *name;
+    solar_os_display_rect_t canvas;
+    bool reset;
+} display_canvas_request_t;
+
+static esp_err_t display_apply_canvas(void *context)
+{
+    const display_canvas_request_t *request = context;
+    solar_os_display_target_t previous;
+    solar_os_terminal_profile_t profile;
+    if (!solar_os_display_find_target(request->name, &previous)) return ESP_ERR_NOT_FOUND;
+    esp_err_t err = solar_os_display_get_terminal_profile(request->name, &profile);
+    if (err != ESP_OK) return err;
+    err = solar_os_display_set_canvas(request->name, request->reset ? NULL : &request->canvas);
+    if (err != ESP_OK) return err;
+    err = solar_os_sessions_set_display_terminal_profile(request->name, &profile);
+    if (err != ESP_OK) (void)solar_os_display_set_canvas(request->name, &previous.canvas);
+    return err;
+}
+
+static void display_cmd_canvas(solar_os_shell_io_t *term, int argc, char **argv)
+{
+    const char *usage = "display canvas <target> [default|full|x y width height]";
+    if (argc != 3 && argc != 4 && argc != 7) {
+        solar_os_shell_io_printf(term, "usage: %s\n", usage);
+        return;
+    }
+    solar_os_display_target_t target;
+    if (!solar_os_display_find_target(argv[2], &target)) {
+        solar_os_shell_diag_esp(term, "display canvas", ESP_ERR_NOT_FOUND, NULL, NULL);
+        return;
+    }
+    if (argc > 3) {
+        display_canvas_request_t request = {.name = argv[2], .canvas = target.panel};
+        if (argc == 4) {
+            request.reset = strcmp(argv[3], "default") == 0;
+            if (!request.reset && strcmp(argv[3], "full") != 0) {
+                solar_os_shell_io_printf(term, "usage: %s\n", usage);
+                return;
+            }
+        } else {
+            size_t values[4];
+            for (size_t i = 0; i < 4; i++) {
+                if (!parse_size_arg(argv[i+3], i < 2 ? 0 : 1, UINT16_MAX, &values[i])) {
+                    solar_os_shell_io_printf(term, "usage: %s\n", usage);
+                    return;
+                }
+            }
+            request.canvas = (solar_os_display_rect_t){values[0], values[1], values[2], values[3]};
+        }
+        const esp_err_t err = solar_os_sessions_run_on_owner(display_apply_canvas, &request);
+        if (err != ESP_OK) {
+            solar_os_shell_diag_esp(term, "display canvas", err, NULL, NULL);
+            return;
+        }
+        (void)solar_os_display_find_target(argv[2], &target);
+    }
+    solar_os_shell_io_printf(term, "%s panel: %dx%d\ncanvas: x=%d y=%d width=%d height=%d (temporary)\n",
+        target.name, target.panel.width, target.panel.height,
+        target.canvas.x, target.canvas.y, target.canvas.width, target.canvas.height);
+}
+
 static void display_cmd_geometry(solar_os_shell_io_t *term, int argc, char **argv, bool save)
 {
     const bool orientation = strcmp(argv[1], "orientation") == 0;
@@ -822,6 +887,11 @@ static void display_cmd_geometry(solar_os_shell_io_t *term, int argc, char **arg
 void solar_os_shell_cmd_display(solar_os_context_t *ctx, int argc, char **argv)
 {
     solar_os_shell_io_t *term = terminal(ctx);
+
+    if (argc >= 2 && strcmp(argv[1], "canvas") == 0) {
+        display_cmd_canvas(term, argc, argv);
+        return;
+    }
 
     if (argc >= 2 && (strcmp(argv[1], "orientation") == 0 || strcmp(argv[1], "scale") == 0)) {
         display_cmd_geometry(term, argc, argv, false);
@@ -2016,8 +2086,9 @@ static void setterm_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "  setterm --display <target> [orientation|scale|font|textsize|palette|statusbar] [value]");
     solar_os_shell_io_writeln(term, "  setterm scale [1..4]");
     solar_os_shell_io_writeln(term, "  setterm orientation [0|90|180|270]");
-    solar_os_shell_io_writeln(term, "  setterm font [mono|compact]");
+    solar_os_shell_io_writeln(term, "  setterm font [mono|compact|load <pack>|unload <pack>]");
     solar_os_shell_io_writeln(term, "  setterm textsize [8|10|12|14|16|18|20]");
+    solar_os_shell_io_writeln(term, "  setterm cursor [block|underscore] [blink|steady]");
     solar_os_shell_io_writeln(term, "  setterm palette [normal|inverted]");
     solar_os_shell_io_writeln(term, "  setterm foreground [#RRGGBB]");
     solar_os_shell_io_writeln(term, "  setterm background [#RRGGBB]");
@@ -2026,8 +2097,8 @@ static void setterm_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "  setterm backlight [0..100|follow]");
     solar_os_shell_io_writeln(term, "  setterm profile [vt100|ansi|dumb]");
     solar_os_shell_io_writeln(term, "  setterm charset [utf8|ascii]");
+    solar_os_shell_io_writeln(term, "  setterm keyboard [<layout>[,<layout>...]]");
 #if SOLAR_OS_PACKAGE_SERVICE_BLE
-    solar_os_shell_io_writeln(term, "  setterm keyboard [us|de]");
     solar_os_shell_io_writeln(term, "  setterm ble [default|on|off]");
 #endif
     solar_os_shell_io_writeln(term, "  setterm powerkey [short|long] [default|off|enter|app-exit|sleep|suspend|deepsleep|shutdown|ble-pair]");
@@ -2037,6 +2108,75 @@ static void setterm_print_usage(solar_os_shell_io_t *term)
 #if SOLAR_OS_PACKAGE_SERVICE_OTA
     solar_os_shell_io_writeln(term, "  setterm otaurl [url]");
 #endif
+}
+
+static void setterm_font_pack_list_cb(const char *name, void *ctx)
+{
+    solar_os_shell_io_t *term = ctx;
+    solar_os_shell_io_printf(term, " %s", name);
+}
+
+static void setterm_font_packs_status(solar_os_shell_io_t *term)
+{
+    const size_t loaded = solar_os_font_pack_count();
+    if (loaded == 0) {
+        solar_os_shell_io_writeln(term, "font packs: none loaded");
+    }
+    for (size_t i = 0; i < loaded; i++) {
+        solar_os_font_pack_info_t info;
+        if (solar_os_font_pack_get(i, &info)) {
+            solar_os_shell_io_printf(term,
+                                     "font pack: %s, %u of %u faces, %u bytes%s\n",
+                                     info.name,
+                                     (unsigned)info.faces_loaded,
+                                     (unsigned)info.faces_total,
+                                     (unsigned)info.bytes,
+                                     info.reduced ? " (reduced: no PSRAM)" : "");
+        }
+    }
+    solar_os_shell_io_writeln(term, "available packs:");
+    char dir[SOLAR_OS_STORAGE_PATH_MAX];
+    if (solar_os_font_pack_dir(dir, sizeof(dir)) == ESP_OK) {
+        solar_os_shell_io_printf(term, " in %s:", dir);
+    }
+    if (solar_os_font_pack_list_files(setterm_font_pack_list_cb, term) != ESP_OK) {
+        solar_os_shell_io_writeln(term, " none (no fonts directory)");
+        return;
+    }
+    solar_os_shell_io_writeln(term, "");
+}
+
+/* setterm font load|unload <pack>: the pack's glyphs fill in for characters
+ * the built-in faces lack. The loaded set is saved and restored at boot. */
+static void setterm_font_pack_command(solar_os_shell_io_t *term, int argc, char **argv)
+{
+    static const char *const usage = "setterm font [load <pack>|unload <pack>]";
+    if (argc != 4) {
+        solar_os_shell_diag_missing(term, "setterm font", "pack", usage);
+        return;
+    }
+    const bool load = strcmp(argv[2], "load") == 0;
+    if (!solar_os_font_pack_name_valid(argv[3])) {
+        solar_os_shell_diag_invalid(term, "setterm font", "pack", argv[3],
+                                    "lowercase letters, digits, - and _ (up to 15)", usage, false);
+        return;
+    }
+    esp_err_t err = load ? solar_os_font_pack_load(argv[3]) : solar_os_font_pack_unload(argv[3]);
+    if (err == ESP_ERR_NOT_FOUND) {
+        solar_os_shell_io_printf(term,
+                                 load ? "font pack %s: not found in the fonts directory\n"
+                                      : "font pack %s: not loaded\n",
+                                 argv[3]);
+        return;
+    }
+    if (err == ESP_OK) {
+        err = solar_os_font_pack_save_selection();
+    }
+    if (err != ESP_OK) {
+        solar_os_shell_io_printf(term, "font pack %s: %s\n", argv[3], solar_os_shell_error_text(err));
+        return;
+    }
+    solar_os_shell_io_printf(term, "font pack %s: %s\n", argv[3], load ? "loaded" : "unloaded");
 }
 
 static void setterm_print_save_result(solar_os_shell_io_t *term,
@@ -2166,6 +2306,44 @@ static void setterm_geometry_alias(solar_os_context_t *ctx, solar_os_shell_io_t 
     display_cmd_geometry(term, argc + 1, geometry_args, true);
 }
 
+static void setterm_cursor(solar_os_shell_io_t *term, int argc, char **argv)
+{
+    const char *usage = "setterm cursor [block|underscore] [blink|steady]";
+    solar_os_terminal_cursor_shape_t shape;
+    bool blink;
+    solar_os_terminal_get_cursor_preference(&shape, &blink);
+    if (argc > 4) {
+        solar_os_shell_diag_unexpected(term, "setterm cursor", argv[4], usage);
+        return;
+    }
+    if (argc >= 3 && !solar_os_terminal_parse_cursor_shape(argv[2], &shape)) {
+        solar_os_shell_diag_invalid(term, "setterm cursor", "shape", argv[2],
+                                    "block or underscore", usage, false);
+        return;
+    }
+    if (argc == 4) {
+        if (strcmp(argv[3], "blink") == 0) blink = true;
+        else if (strcmp(argv[3], "steady") == 0) blink = false;
+        else {
+            solar_os_shell_diag_invalid(term, "setterm cursor", "mode", argv[3],
+                                        "blink or steady", usage, false);
+            return;
+        }
+    }
+    char value[32];
+    snprintf(value, sizeof(value), "%s %s",
+             solar_os_terminal_cursor_shape_name(shape), blink ? "blink" : "steady");
+    if (argc == 2) {
+        solar_os_shell_io_printf(term, "cursor: %s\n", value);
+        solar_os_shell_io_writeln(term, "shapes: block underscore; modes: blink steady");
+        return;
+    }
+    const esp_err_t err = solar_os_terminal_set_cursor_preference(shape, blink);
+    if (err == ESP_OK) solar_os_shell_io_printf(term, "cursor: %s\n", value);
+    else solar_os_shell_io_printf(term, "cursor: save failed: %s\n",
+                                   solar_os_shell_error_text(err));
+}
+
 void solar_os_shell_cmd_setterm(solar_os_context_t *ctx, int argc, char **argv)
 {
     solar_os_shell_io_t *term = terminal(ctx);
@@ -2224,6 +2402,11 @@ void solar_os_shell_cmd_setterm(solar_os_context_t *ctx, int argc, char **argv)
         return;
     }
 
+    if (strcmp(argv[1], "cursor") == 0) {
+        setterm_cursor(term, argc, argv);
+        return;
+    }
+
     if (strcmp(argv[1], "orientation") == 0 || strcmp(argv[1], "scale") == 0) {
         setterm_geometry_alias(ctx, term, argc, argv, display_target);
         return;
@@ -2238,18 +2421,23 @@ void solar_os_shell_cmd_setterm(solar_os_context_t *ctx, int argc, char **argv)
                                              display_profile.font :
                                              solar_os_terminal_font(display)));
             solar_os_shell_io_writeln(term, "values: mono compact");
+            setterm_font_packs_status(term);
+            return;
+        }
+        if (argc >= 3 && (strcmp(argv[2], "load") == 0 || strcmp(argv[2], "unload") == 0)) {
+            setterm_font_pack_command(term, argc, argv);
             return;
         }
         if (argc != 3) {
             solar_os_shell_diag_unexpected(term, "setterm font", argv[3],
-                                           "setterm font [mono|compact]");
+                                           "setterm font [mono|compact|load <pack>|unload <pack>]");
             return;
         }
 
         solar_os_terminal_font_t font;
         if (!solar_os_terminal_parse_font(argv[2], &font)) {
             solar_os_shell_diag_invalid(term, "setterm font", "font", argv[2],
-                                        "mono or compact", "setterm font [mono|compact]", false);
+                                        "mono, compact, load or unload", "setterm font [mono|compact|load <pack>|unload <pack>]", false);
             return;
         }
 
@@ -2589,23 +2777,28 @@ void solar_os_shell_cmd_setterm(solar_os_context_t *ctx, int argc, char **argv)
                                      "keyboard: %s\n",
                                      solar_os_input_keyboard_layout_name(
                                          solar_os_input_keyboard_layout()));
-            solar_os_shell_io_writeln(term, "values: us de");
+            char layouts[SOLAR_OS_INPUT_KEYBOARD_LAYOUT_LIST_MAX];
+            if (solar_os_input_keyboard_layout_list(layouts, sizeof(layouts)) == ESP_OK) {
+                solar_os_shell_io_printf(term, "layouts: %s\n", layouts);
+            }
+            solar_os_shell_io_writeln(term, "values: us de ua fr ro");
+            solar_os_shell_io_writeln(term, "comma-separated list: Ctrl+Space switches layouts");
             return;
         }
         if (argc != 3) {
             solar_os_shell_diag_unexpected(term, "setterm keyboard", argv[3],
-                                           "setterm keyboard [us|de]");
+                                           "setterm keyboard [<layout>[,<layout>...]]");
             return;
         }
 
-        solar_os_input_keyboard_layout_t layout;
-        if (!solar_os_input_parse_keyboard_layout(argv[2], &layout)) {
+        const esp_err_t err = solar_os_input_set_keyboard_layout_list(argv[2]);
+        if (err == ESP_ERR_INVALID_ARG) {
             solar_os_shell_diag_invalid(term, "setterm keyboard", "layout", argv[2],
-                                        "us or de", "setterm keyboard [us|de]", false);
+                                        "unique comma-separated layouts: us, de, ua, fr, ro",
+                                        "setterm keyboard [<layout>[,<layout>...]]", false);
             return;
         }
 
-        const esp_err_t err = solar_os_input_set_keyboard_layout(layout);
         setterm_print_save_result(term, "keyboard", argv[2], err);
         return;
     }
@@ -2937,6 +3130,12 @@ static void stream_print_list(solar_os_shell_io_t *term)
 void solar_os_shell_cmd_stream(solar_os_context_t *ctx, int argc, char **argv)
 {
     solar_os_shell_io_t *term = terminal(ctx);
+    if(argc>=2 && !strcmp(argv[1],"echo")) {
+        solar_os_shell_cmd_stream_echo(ctx,argc,argv);return;
+    }
+    if(argc>=2 && !strcmp(argv[1],"write")) {
+        solar_os_shell_cmd_stream_write(ctx,argc,argv);return;
+    }
 
 #if SOLAR_OS_PACKAGE_SERVICE_BLE_STREAM
     if (argc >= 2 && !strcmp(argv[1], "ble")) {
@@ -3034,6 +3233,11 @@ void solar_os_shell_cmd_stream(solar_os_context_t *ctx, int argc, char **argv)
                                  info.device[0] != '\0' ? info.device : "-");
         solar_os_shell_io_printf(term, "Format: %s\n", info.format);
         solar_os_shell_io_printf(term, "Unit: %s\n", info.unit[0] != '\0' ? info.unit : "-");
+        if (info.has_scalar_range) {
+            solar_os_shell_io_printf(term, "Allowed range: [%.6g, %.6g]%s%s\n",
+                                     (double)info.scalar_minimum, (double)info.scalar_maximum,
+                                     info.unit[0] != '\0' ? " " : "", info.unit);
+        }
         solar_os_shell_io_printf(term, "Summary: %s\n", info.summary);
         solar_os_shell_io_printf(term, "Handles: %" PRIu32 "\n", info.active_handles);
         solar_os_shell_io_printf(term, "Owner: %s\n",
@@ -3071,13 +3275,13 @@ void solar_os_shell_cmd_stream(solar_os_context_t *ctx, int argc, char **argv)
                                    argc,
                                    argv,
 #if SOLAR_OS_PACKAGE_SERVICE_TCP_STREAM && SOLAR_OS_PACKAGE_SERVICE_BLE_STREAM
-                                   "stream list|status|tcp|ble",
+                                   "stream list|status|echo|write|tcp|ble",
 #elif SOLAR_OS_PACKAGE_SERVICE_TCP_STREAM
-                                   "stream list|status|tcp",
+                                   "stream list|status|echo|write|tcp",
 #elif SOLAR_OS_PACKAGE_SERVICE_BLE_STREAM
-                                   "stream list|status|ble",
+                                   "stream list|status|echo|write|ble",
 #else
-                                   "stream list|status",
+                                   "stream list|status|echo|write",
 #endif
                                    stream_commands,
                                    sizeof(stream_commands) / sizeof(stream_commands[0]));
@@ -3758,6 +3962,8 @@ static void sshkey_print_usage(solar_os_shell_io_t *term)
     solar_os_shell_io_writeln(term, "  sshkey gen [-f] [2048|3072|4096]");
     solar_os_shell_io_writeln(term, "  sshkey pub");
     solar_os_shell_io_writeln(term, "  sshkey rm");
+    solar_os_shell_io_printf(term, "Default RSA key size: %u bits\n",
+                             (unsigned)SOLAR_OS_SSH_KEY_DEFAULT_BITS);
 }
 
 static void sshkey_print_status(solar_os_shell_io_t *term)

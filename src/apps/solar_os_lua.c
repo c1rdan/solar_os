@@ -23,6 +23,9 @@
 #include "solar_os_app_registry.h"
 #include "solar_os_board_caps.h"
 #include "solar_os_config.h"
+#if SOLAR_OS_PACKAGE_SERVICE_AOGMANEO
+#include "solar_os_aogmaneo.h"
+#endif
 #if SOLAR_OS_PACKAGE_SERVICE_EMOTION
 #include "solar_os_emotion.h"
 #endif
@@ -348,6 +351,9 @@ typedef enum {
 
 typedef struct {
     solua_state_t app;
+#if SOLAR_OS_PACKAGE_SERVICE_AOGMANEO
+    solar_os_aogmaneo_context_t aogmaneo;
+#endif
 #if SOLAR_OS_PACKAGE_SERVICE_MIDI
     solar_os_midi_subscription_t midi_subscription;
     bool midi_subscribed;
@@ -931,6 +937,7 @@ static void solua_push_battery_status(lua_State *L, const solar_os_battery_statu
     solua_set_bool(L, -1, "percent_estimated", status->percent_estimated);
     solua_set_bool(L, -1, "adc_calibrated", status->adc_calibrated);
     solua_set_bool(L, -1, "external_power", status->external_power);
+    solua_set_bool(L, -1, "external_power_known", status->external_power_known);
     solua_set_bool(L, -1, "charging", status->charging);
     solua_set_bool(L, -1, "charging_known", status->charging_known);
 }
@@ -2731,10 +2738,17 @@ static void solua_push_osc_binding(lua_State *L,
     solua_set_str(L, item, "value_type",
                   solar_os_osc_value_name(info->config.value_type));
     solua_set_str(L, item, "source", info->config.source);
+    solua_set_str(L,item,"direction",info->config.direction==SOLAR_OS_OSC_RECEIVE?"receive":"send");
+    solua_set_int(L,item,"argument",info->config.argument);
+    solua_set_bool(L,item,"target_available",info->target_available);
+    solua_set_bool(L,item,"target_claimed",info->target_claimed);
+    solua_set_int(L,item,"received",info->received);
+    solua_set_int(L,item,"write_errors",info->write_errors);
+    solua_set_int(L,item,"last_receive_ms",(lua_Integer)info->last_receive_ms);
     solua_set_str(L, item, "address", info->config.address);
     solua_set_int(L, item, "interval_ms", info->config.interval_ms);
     solua_set_num(L, item, "rate_hz",
-                  1000.0 / (lua_Number)info->config.interval_ms);
+                  info->config.direction==SOLAR_OS_OSC_SEND?1000.0 / (lua_Number)info->config.interval_ms:0);
     solua_set_num(L, item, "delta", info->config.delta);
     solua_set_bool(L, item, "send_always", info->config.send_always);
     solua_set_str(L, item, "edge", solar_os_osc_edge_name(info->config.edge));
@@ -2822,6 +2836,15 @@ static int solua_osc_bind_stream(lua_State *L)
     return solua_osc_bind_config(L, &config);
 }
 
+static int solua_osc_bind_receive(lua_State *L)
+{
+    lua_Integer argument=luaL_optinteger(L,4,0);
+    luaL_argcheck(L,argument>=0 && argument<SOLAR_OS_OSC_ARGUMENT_MAX,4,"expected OSC argument index 0..7");
+    solar_os_osc_binding_config_t config={.direction=SOLAR_OS_OSC_RECEIVE,.argument=(uint32_t)argument};
+    solua_osc_binding_strings(L,&config);
+    return solua_osc_bind_config(L,&config);
+}
+
 static solar_os_osc_edge_t solua_osc_edge(lua_State *L, int index)
 {
     const char *edge = luaL_checkstring(L, index);
@@ -2873,7 +2896,7 @@ static int solua_osc_unbind(lua_State *L)
 static int solua_osc_clear(lua_State *L)
 {
     const size_t removed = solar_os_osc_binding_count();
-    solar_os_osc_clear();
+    (void)solua_check_esp(L,solar_os_osc_clear());
     lua_pushinteger(L, (lua_Integer)removed);
     return 1;
 }
@@ -2923,6 +2946,7 @@ static int solua_osc_limits(lua_State *L)
 {
     lua_newtable(L);
     solua_set_int(L, -1, "packet_max", SOLAR_OS_OSC_PACKET_MAX);
+    solua_set_int(L,-1,"argument_max",SOLAR_OS_OSC_ARGUMENT_MAX);
     solua_set_int(L, -1, "address_max", SOLAR_OS_OSC_ADDRESS_MAX - 1U);
     solua_set_int(L, -1, "bindings_max", SOLAR_OS_OSC_BINDING_MAX);
     solua_set_int(L, -1, "bundle_depth_max", SOLAR_OS_OSC_BUNDLE_DEPTH_MAX);
@@ -3030,6 +3054,17 @@ static int solua_encoder_status(lua_State *L)
     (void)solua_check_esp(L, solar_os_encoder_status(luaL_checkstring(L, 1), &status));
     solua_push_encoder_info(L, &status.info);
     solua_set_int(L, -1, "count", status.count);
+    solua_set_num(L,-1,"ppr",status.config.ppr);
+    solua_set_num(L,-1,"gear_ratio",status.config.gear_ratio);
+    solua_set_int(L,-1,"polarity",status.config.polarity);
+    solua_set_bool(L,-1,"encoder_on_output",status.config.encoder_on_output);
+    solua_set_num(L,-1,"velocity_tau",status.config.velocity_tau);
+    solua_set_num(L,-1,"position_zero",status.config.position_zero);
+    solua_set_num(L,-1,"counts_per_rev",solar_os_native_encoder_counts_per_rev(&status.config,status.info.mode));
+    solua_set_num(L,-1,"velocity",status.feedback.velocity);
+    solua_set_num(L,-1,"position",status.feedback.position);
+    solua_set_bool(L,-1,"velocity_valid",status.feedback.valid);
+    solua_set_bool(L,-1,"claimed",status.claimed);
     return 1;
 }
 
@@ -3044,6 +3079,10 @@ static int solua_encoder_read(lua_State *L)
 static int solua_encoder_reset(lua_State *L)
 {
     return solua_check_esp(L, solar_os_encoder_reset(luaL_checkstring(L, 1)));
+}
+static int solua_encoder_configure(lua_State *L)
+{
+    return solua_check_esp(L,solar_os_encoder_configure(luaL_checkstring(L,1),luaL_checkstring(L,2),(float)luaL_checknumber(L,3)));
 }
 #endif
 
@@ -3087,6 +3126,10 @@ static int solua_motor_status(lua_State *L)
     solua_set_bool(L, -1, "raw_valid", status.raw_valid);
     solua_set_int(L, -1, "raw_control", status.raw_control);
     solua_set_int(L, -1, "raw_fault", status.raw_fault);
+    solua_set_int(L,-1,"polarity",status.config.polarity);
+    solua_set_num(L,-1,"max_drive",status.config.max_drive);
+    solua_set_bool(L,-1,"brake",status.config.brake);
+    solua_set_bool(L,-1,"claimed",status.claimed);
     return 1;
 }
 
@@ -3109,6 +3152,10 @@ static int solua_motor_clear(lua_State *L)
 {
     return solua_check_esp(L, solar_os_motor_clear(luaL_checkstring(L, 1)));
 }
+static int solua_motor_configure(lua_State *L)
+{
+    return solua_check_esp(L,solar_os_motor_configure(luaL_checkstring(L,1),luaL_checkstring(L,2),(float)luaL_checknumber(L,3)));
+}
 #endif
 
 #if SOLAR_OS_PACKAGE_SERVICE_SERVO
@@ -3123,13 +3170,16 @@ static void solua_push_servo_info(lua_State *L, const solar_os_servo_info_t *inf
     solua_set_int(L, -1, "freq_hz", info->config.freq_hz);
     solua_set_int(L, -1, "pulse_min_us", info->config.pulse_min_us);
     solua_set_int(L, -1, "pulse_max_us", info->config.pulse_max_us);
-    solua_set_num(L, -1, "angle_min_deg", info->config.angle_min_deg);
-    solua_set_num(L, -1, "angle_max_deg", info->config.angle_max_deg);
+    solua_set_num(L, -1, "angle_min_rad", info->config.angle_min_rad);
+    solua_set_num(L, -1, "angle_max_rad", info->config.angle_max_rad);
     solua_set_bool(L, -1, "inverted", info->config.inverted);
     solua_set_bool(L, -1, "enabled", info->enabled);
     solua_set_bool(L, -1, "has_command", info->has_command);
     solua_set_int(L, -1, "commanded_pulse_us", info->commanded_pulse_us);
-    solua_set_num(L, -1, "commanded_angle_deg", info->commanded_angle_deg);
+    solua_set_num(L, -1, "commanded_angle_rad", info->commanded_angle_rad);
+    solua_set_bool(L,-1,"input_claimed",info->input_claimed);
+    solua_set_bool(L,-1,"stream_writable",info->stream_writable);
+    solua_set_bool(L,-1,"closing",info->closing);
 }
 
 static int solua_servo_list(lua_State *L)
@@ -3158,8 +3208,8 @@ static int solua_servo_open(lua_State *L)
         .output = solua_pwm_output(L, 2),
         .pulse_min_us = solua_check_u32(L, 3),
         .pulse_max_us = solua_check_u32(L, 4),
-        .angle_min_deg = (float)luaL_checknumber(L, 5),
-        .angle_max_deg = (float)luaL_checknumber(L, 6),
+        .angle_min_rad = (float)luaL_checknumber(L, 5),
+        .angle_max_rad = (float)luaL_checknumber(L, 6),
         .freq_hz = lua_isnoneornil(L, 7) ? SOLAR_OS_SERVO_FREQ_DEFAULT_HZ : solua_check_u32(L, 7),
         .inverted = lua_toboolean(L, 8) != 0,
     };
@@ -4328,6 +4378,8 @@ static int solua_expansion_devices(lua_State *L)
 static bool solua_expansion_key_known(const char *key)
 {
     static const char *const keys[] = {
+        "row0", "row1", "row2", "row3", "row4", "row5", "row6", "row7", "col0", "col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9",
+        "drive", "diodes", "debounce-ms",
         "stream", "timeout-ms", "ready", "clock", "reset-ms", "boot-ms", "reset-active", "max_mv",
         "mode", "invert", "pull", "filter_ns",
         "spi", "cs", "ce", "i2c", "addr", "alt_addr", "uart", "ps2", "gpio", "irq", "int", "reset",
@@ -4570,6 +4622,24 @@ static int solua_expansion_attach(lua_State *L)
         const char *role;
         solar_os_expansion_binding_kind_t kind;
     } pin_bindings[] = {
+        {"row0", "row0", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row1", "row1", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row2", "row2", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row3", "row3", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row4", "row4", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row5", "row5", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row6", "row6", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"row7", "row7", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col0", "col0", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col1", "col1", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col2", "col2", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col3", "col3", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col4", "col4", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col5", "col5", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col6", "col6", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col7", "col7", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col8", "col8", SOLAR_OS_EXPANSION_BINDING_GPIO},
+        {"col9", "col9", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"gpio", "gpio", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"irq", "irq", SOLAR_OS_EXPANSION_BINDING_GPIO},
         {"int", "int", SOLAR_OS_EXPANSION_BINDING_GPIO},
@@ -4624,6 +4694,7 @@ static int solua_expansion_attach(lua_State *L)
                                     -1);
     }
     static const char *const parameter_bindings[] = {
+        "drive", "diodes", "debounce-ms",
         "min", "center", "max", "deadzone", "timeout-ms", "clock", "reset-ms", "boot-ms", "reset-active", "max_mv",
         "mode", "invert", "pull", "filter_ns",
     };
@@ -5541,7 +5612,7 @@ static int solua_ble_layout(lua_State *L)
 
     solar_os_ble_keyboard_layout_t layout;
     if (!solar_os_ble_keyboard_parse_layout(luaL_checkstring(L, 1), &layout)) {
-        return luaL_error(L, "expected us or de");
+        return luaL_error(L, "expected us, de, ua, fr or ro");
     }
     return solua_check_esp(L, solar_os_ble_keyboard_set_layout(layout));
 }
@@ -7096,6 +7167,17 @@ static int solua_gfx_size(lua_State *L)
     return 2;
 }
 
+static int solua_gfx_bounds(lua_State *L, bool panel)
+{
+    const solar_os_display_rect_t r = panel ? solar_os_gfx_panel_bounds(solua_current_gfx()) :
+        solar_os_gfx_canvas_bounds(solua_current_gfx());
+    lua_pushinteger(L, r.x); lua_pushinteger(L, r.y);
+    lua_pushinteger(L, r.width); lua_pushinteger(L, r.height);
+    return 4;
+}
+static int solua_gfx_canvas_bounds(lua_State *L) { return solua_gfx_bounds(L, false); }
+static int solua_gfx_panel_bounds(lua_State *L) { return solua_gfx_bounds(L, true); }
+
 static int solua_gfx_clear(lua_State *L)
 {
     const solar_os_gfx_color_t color =
@@ -7441,12 +7523,15 @@ static int solua_gfx_text(lua_State *L)
 }
 
 #include "solar_os_lua_media.inc"
+#include "solar_os_lua_usb_serial.inc"
 #include "solar_os_lua_imlib.inc"
 #include "solar_os_lua_inference.inc"
+#include "solar_os_lua_agent.inc"
 #include "solar_os_lua_pipeline.inc"
 #include "solar_os_lua_dlp.inc"
 #include "solar_os_lua_emotion.inc"
 #include "solar_os_lua_jet.inc"
+#include "solar_os_lua_aogmaneo.inc"
 
 #if SOLAR_OS_PACKAGE_SERVICE_MESSAGING
 static void solua_push_contact(lua_State *L,
@@ -8152,6 +8237,7 @@ esp_err_t solar_os_lua_run(const solar_os_script_run_request_t *request,
     solua_dlp_destroy();
     solua_emotion_destroy();
     solua_jet_destroy();
+    solua_aogmaneo_cleanup();
     solua_robot_destroy();
 #if SOLAR_OS_PACKAGE_SERVICE_HTTP_CLIENT
     solua_http_stream_destroy();
@@ -8268,6 +8354,7 @@ done:
         solua_dlp_destroy();
         solua_emotion_destroy();
         solua_jet_destroy();
+        solua_aogmaneo_cleanup();
         solua_robot_destroy();
 #if SOLAR_OS_PACKAGE_SERVICE_HTTP_CLIENT
         solua_http_stream_destroy();
@@ -8565,7 +8652,7 @@ static void solua_stop(solar_os_context_t *ctx)
              * worker. Never delete that owner task mid-call.
              * Interpreter cancellation remains active while we wait. */
             while ((__atomic_load_n(&solua_media_session, __ATOMIC_ACQUIRE) != NULL ||
-                    solua_inference_active() || solua_imlib_active() || solua_emotion_active() || solua_jet_active()) &&
+                    solua_inference_active() || solua_imlib_active() || solua_emotion_active() || solua_jet_active() || solua_aogmaneo_active()) &&
                    !solua_task_stopped(NULL)) {
                 (void)solar_os_script_wait_for_stop(solua_task_stopped, NULL,
                     SOLUA_STOP_WAIT_MS, 20U);
@@ -8606,6 +8693,7 @@ static void solua_stop(solar_os_context_t *ctx)
     }
     solua_emotion_destroy();
     solua_jet_destroy();
+    solua_aogmaneo_cleanup();
     solua_robot_destroy();
     solua_gfx_release_target();
 #if SOLAR_OS_PACKAGE_SERVICE_SYNTH
